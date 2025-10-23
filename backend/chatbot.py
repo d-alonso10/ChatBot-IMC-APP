@@ -160,7 +160,7 @@ def procesar_mensaje(mensaje: str) -> Tuple[str, bool, Optional[str]]:
         if numero is None:
             estado["intentos_fallidos"] += 1
             if estado["intentos_fallidos"] >= 3:
-                return "🤔 Parece que hay confusión. La edad debe ser un número entero (ejemplo: 5, 10, 15). ¿Quieres reiniciar? Escribe 'reiniciar'.", False, None
+                return "🤔 Parece que hay confusión. La edad debe ser un número entero. Por ejemplo, si tiene 5 años, escribe solo '5'. ¿Quieres reiniciar? Escribe 'reiniciar'.", False, None
             return "⚠️ La edad debe ser un número entero. Ejemplo: 5", False, None
         
         edad = int(numero)
@@ -191,16 +191,17 @@ def procesar_mensaje(mensaje: str) -> Tuple[str, bool, Optional[str]]:
         else:
             estado["intentos_fallidos"] += 1
             if estado["intentos_fallidos"] >= 3:
-                return "🤔 No logro entender. Por favor responde con 'niño' o 'niña'. Si necesitas ayuda, escribe 'reiniciar'.", False, None
+                return "🤔 No logro entender. Por favor responde con la palabra 'niño' o 'niña'. Por ejemplo, si es niño, escribe solo 'niño'. ¿Quieres reiniciar? Escribe 'reiniciar'.", False, None
             return "🚻 Por favor, responde con 'niño' o 'niña'.", False, None
         
         estado["intentos_fallidos"] = 0
         
-        # Respuestas variadas con confirmación
+        # Respuestas variadas con confirmación sutil
+        sexo_confirmado = "niño" if estado["sexo"] == "niño" else "niña"
         respuestas = [
-            f"Perfecto. Ahora, ¿cuánto pesa? (en kg, ejemplo: 15.5)",
-            f"Entendido. ¿Cuál es su peso en kilogramos? (ej: 20.3)",
-            f"Muy bien. Siguiente dato: ¿cuánto pesa en kg?"
+            f"Ok, {sexo_confirmado}. Ahora, ¿cuánto pesa? (en kg, ejemplo: 15.5)",
+            f"Entendido, {sexo_confirmado}. ¿Cuál es su peso en kilogramos? (ej: 20.3)",
+            f"Perfecto. Siguiente dato: ¿cuánto pesa en kg?"
         ]
         return random.choice(respuestas), False, None
 
@@ -210,7 +211,7 @@ def procesar_mensaje(mensaje: str) -> Tuple[str, bool, Optional[str]]:
         if numero is None:
             estado["intentos_fallidos"] += 1
             if estado["intentos_fallidos"] >= 3:
-                return "🤔 El peso debe ser un número. Ejemplo: 15.5 o 20.3. ¿Necesitas reiniciar? Escribe 'reiniciar'.", False, None
+                return "🤔 El peso debe ser un número. Por ejemplo, si pesa 15 kilos y medio, escribe '15.5'. ¿Necesitas reiniciar? Escribe 'reiniciar'.", False, None
             return "🚫 El peso debe ser un número. Puedes usar decimales (ejemplo: 15.5).", False, None
         
         peso = numero
@@ -228,11 +229,11 @@ def procesar_mensaje(mensaje: str) -> Tuple[str, bool, Optional[str]]:
         estado["peso"] = peso
         estado["intentos_fallidos"] = 0
         
-        # Respuestas variadas
+        # Respuestas variadas con opción de cm o metros
         respuestas = [
-            f"Anotado, {peso} kg. Un último dato: ¿cuál es su estatura en metros? (ej: 1.10)",
-            f"Perfecto, {peso} kg. Ahora la talla en metros (ejemplo: 1.15)",
-            f"Muy bien. Peso: {peso} kg. ¿Y la estatura? (en metros, ej: 1.20)"
+            f"Anotado, {peso} kg. Último dato: ¿cuál es su estatura? (en metros ej: 1.10, o en cm ej: 110)",
+            f"Perfecto, {peso} kg. Ahora la talla (en metros: 1.15 o en cm: 115)",
+            f"Entendido, {peso} kg. ¿Y la estatura? (puedes usar metros como 1.20 o cm como 120)"
         ]
         return random.choice(respuestas), False, None
 
@@ -242,8 +243,8 @@ def procesar_mensaje(mensaje: str) -> Tuple[str, bool, Optional[str]]:
         if numero is None:
             estado["intentos_fallidos"] += 1
             if estado["intentos_fallidos"] >= 3:
-                return "🤔 La talla debe ser un número en metros. Ejemplo: 1.10 o 1.25. ¿Reiniciamos? Escribe 'reiniciar'.", False, None
-            return "📐 La talla debe ser un número en metros. Ejemplo: 1.15", False, None
+                return "🤔 La talla debe ser un número. Por ejemplo, si mide 1 metro y 10 centímetros, escribe '1.10' o '110'. ¿Reiniciamos? Escribe 'reiniciar'.", False, None
+            return "📐 La talla debe ser un número en metros (ej: 1.15) o en cm (ej: 115).", False, None
         
         talla = numero
         
@@ -289,9 +290,15 @@ def procesar_mensaje(mensaje: str) -> Tuple[str, bool, Optional[str]]:
             estado["graph_id"] = graph_id
 
             nombre = estado.get("nombre")
+            # Frases de transición aleatorias
+            transiciones = [
+                "✨ ¡Listo! Déjame calcular...",
+                "📊 Perfecto. Procesando datos...",
+                "✅ ¡Entendido! Calculando el IMC..."
+            ]
             mensaje_resultado = confirmacion if 'confirmacion' in locals() else ""
             mensaje_resultado += (
-                f"✨ ¡Listo! Calculando...\n\n"
+                f"{random.choice(transiciones)}\n\n"
                 f"✅ El IMC es: {round(imc, 2)} - Categoría: *{clasificacion.upper()}*\n"
             )
             mensaje_resultado += generar_reporte_resumen(imc, edad, estado["peso"], estado["talla"], clasificacion, nombre)
@@ -306,7 +313,7 @@ def procesar_mensaje(mensaje: str) -> Tuple[str, bool, Optional[str]]:
             return f"❌ Error inesperado al procesar los datos: {str(e)}", False, None
 
     # Comando: Reiniciar
-    if normalizar_texto(mensaje) in ["reiniciar", "nuevo", "calcular otro", "empezar", "comenzar"]:
+    if normalizar_texto(mensaje) in ["reiniciar", "nuevo", "calcular otro", "empezar", "comenzar", "cancelar", "inicio", "otro calculo", "reset", "volver"]:
         reiniciar_estado()
         return "🔄 ¡Perfecto! Comenzamos de nuevo. ¿Cómo se llama el menor?", False, None
 
