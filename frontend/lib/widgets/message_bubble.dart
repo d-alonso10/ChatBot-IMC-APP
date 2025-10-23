@@ -3,8 +3,14 @@ import 'package:flutter/material.dart';
 class MessageBubble extends StatelessWidget {
   final String text;
   final bool isUser;
+  final bool isError;
 
-  const MessageBubble({required this.text, required this.isUser});
+  const MessageBubble({
+    super.key,
+    required this.text,
+    required this.isUser,
+    this.isError = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -43,10 +49,10 @@ class MessageBubble extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (!isUser)
-                    const Text(
-                      'Asistente',
+                    Text(
+                      isError ? 'Error' : 'Asistente',
                       style: TextStyle(
-                        color: Color(0xFF7E57C2),
+                        color: isError ? const Color(0xFFD32F2F) : const Color(0xFF7E57C2),
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
@@ -55,7 +61,11 @@ class MessageBubble extends StatelessWidget {
                   Text(
                     text,
                     style: TextStyle(
-                      color: isUser ? Colors.white : const Color(0xFF424242),
+                      color: isError 
+                          ? const Color(0xFFD32F2F)
+                          : isUser 
+                            ? Colors.white 
+                            : const Color(0xFF424242),
                       fontSize: 15,
                       height: 1.4,
                     ),
