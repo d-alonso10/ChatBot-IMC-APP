@@ -115,10 +115,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
       _startTypingAnimation(response['respuesta']);
 
-      if (response['grafico'] == true) {
+      if (response['grafico'] == true && response['graph_id'] != null) {
+        final graphId = response['graph_id'];
         Future.delayed(Duration(milliseconds: response['respuesta'].length * 30 + 500), () {
           setState(() {
-            _messages.add({'image': ApiService.getGraficoUrl(), 'isUser': false});
+            _messages.add({'image': ApiService.getGraficoUrl(graphId), 'isUser': false});
           });
           _scrollToBottom();
         });

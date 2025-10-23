@@ -1,15 +1,33 @@
 import matplotlib.pyplot as plt
 import os
+import uuid
+from typing import Dict, Any
 
-def calcular_imc(peso, talla):
+def calcular_imc(peso: float, talla: float) -> float:
     """
     Calcula el Índice de Masa Corporal (IMC).
+    
+    Args:
+        peso: Peso del menor en kilogramos
+        talla: Talla del menor en metros
+    
+    Returns:
+        float: Índice de Masa Corporal calculado
     """
     return peso / (talla ** 2)
 
-def clasificar_por_percentil(imc, edad, sexo, tablas):
+def clasificar_por_percentil(imc: float, edad: int, sexo: str, tablas: Dict[str, Any]) -> str:
     """
     Clasifica el IMC según los percentiles definidos en las tablas por edad y sexo.
+    
+    Args:
+        imc: Índice de Masa Corporal calculado
+        edad: Edad del menor en años
+        sexo: Sexo del menor ('niño' o 'niña')
+        tablas: Diccionario con datos de percentiles por edad y sexo
+    
+    Returns:
+        str: Clasificación del IMC (bajo peso, peso normal, riesgo de sobrepeso, obesidad)
     """
     try:
         edad_str = str(edad)
@@ -26,10 +44,19 @@ def clasificar_por_percentil(imc, edad, sexo, tablas):
     except KeyError:
         return "No hay datos para esa edad o sexo."
 
-def generar_grafico_percentil(imc_usuario, edad, sexo, tablas):
+def generar_grafico_percentil(imc_usuario: float, edad: int, sexo: str, tablas: Dict[str, Any]) -> str:
     """
     Genera un gráfico del IMC comparado con percentiles saludables por edad y sexo.
-    Guarda el gráfico como 'ultima_grafica.png'.
+    Guarda el gráfico con un nombre único basado en UUID.
+    
+    Args:
+        imc_usuario: IMC calculado del menor
+        edad: Edad del menor en años
+        sexo: Sexo del menor ('niño' o 'niña')
+        tablas: Diccionario con datos de percentiles por edad y sexo
+    
+    Returns:
+        str: ID único del gráfico generado (UUID)
     """
     edad_int = int(edad)
     edades = sorted([int(k) for k in tablas[sexo].keys()])
@@ -62,7 +89,7 @@ def generar_grafico_percentil(imc_usuario, edad, sexo, tablas):
              fontsize=12, weight='bold', color='black',
              bbox=dict(facecolor='lightyellow', edgecolor='gray', boxstyle='round,pad=0.4'))
 
-    plt.title("Gráfico de Percentiles de IMC (1 a 12 años)", fontsize=16)
+    plt.title("Gráfico de Percentiles de IMC (1 a 18 años)", fontsize=16)
     plt.xlabel("Edad (años)", fontsize=13)
     plt.ylabel("IMC", fontsize=13)
     plt.xticks(fontsize=11)
@@ -71,6 +98,12 @@ def generar_grafico_percentil(imc_usuario, edad, sexo, tablas):
     plt.legend(fontsize=11)
     plt.tight_layout()
 
-    os.makedirs("data", exist_ok=True)
-    plt.savefig("ultima_grafica.png")
+    # Generar nombre único para el gráfico
+    graph_id = str(uuid.uuid4())
+    graph_filename = f"grafico_{graph_id}.png"
+    
+    os.makedirs("graficos", exist_ok=True)
+    plt.savefig(os.path.join("graficos", graph_filename))
     plt.close()
+    
+    return graph_id

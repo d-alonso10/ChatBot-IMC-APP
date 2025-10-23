@@ -14,9 +14,9 @@ class ApiService {
     return jsonDecode(res.body);
   }
 
-  // Obtener gráfico IMC
-  static String getGraficoUrl() {
-    return '$baseUrl/grafico';
+  // Obtener gráfico IMC por ID
+  static String getGraficoUrl(String graphId) {
+    return '$baseUrl/grafico/$graphId';
   }
 
   // Reiniciar estado conversacional

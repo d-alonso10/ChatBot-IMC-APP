@@ -1,20 +1,38 @@
 import json
 import os
+from typing import Dict, Tuple, Optional, Any
 from utils import calcular_imc, generar_grafico_percentil, clasificar_por_percentil
 
-estado = {
+estado: Dict[str, Optional[Any]] = {
     "edad": None,
     "sexo": None,
     "peso": None,
-    "talla": None
+    "talla": None,
+    "graph_id": None
 }
 
-def reiniciar_estado():
+def reiniciar_estado() -> None:
+    """
+    Reinicia el estado conversacional del chatbot a valores iniciales.
+    """
     global estado
     for key in estado:
         estado[key] = None
 
-def generar_reporte_resumen(imc, edad, peso, talla, clasificacion):
+def generar_reporte_resumen(imc: float, edad: int, peso: float, talla: float, clasificacion: str) -> str:
+    """
+    Genera un reporte personalizado con consejos según la clasificación del IMC.
+    
+    Args:
+        imc: Índice de Masa Corporal calculado
+        edad: Edad del menor en años
+        peso: Peso del menor en kilogramos
+        talla: Talla del menor en metros
+        clasificacion: Categoría del IMC (bajo peso, peso normal, riesgo de sobrepeso, obesidad)
+    
+    Returns:
+        str: Reporte completo con resumen y consejos personalizados
+    """
     talla_cm = int(talla * 100)
     resumen = (
         f"\n📋 Resultado para niño de {edad} años:\n"
@@ -60,49 +78,58 @@ def generar_reporte_resumen(imc, edad, peso, talla, clasificacion):
 
     return resumen + consejos
 
-def procesar_mensaje(mensaje):
+def procesar_mensaje(mensaje: str) -> Tuple[str, bool, Optional[str]]:
+    """
+    Procesa el mensaje del usuario y gestiona el flujo conversacional del chatbot.
+    
+    Args:
+        mensaje: Texto enviado por el usuario
+    
+    Returns:
+        Tuple[str, bool, Optional[str]]: (respuesta_texto, mostrar_grafico, graph_id)
+    """
     global estado
 
     mensaje = mensaje.strip()
     if not mensaje:
-        return "No recibí nada 😅. Por favor, escribe un dato válido.", False
+        return "No recibí nada 😅. Por favor, escribe un dato válido.", False, None
 
     # Etapa 1: Edad
     if estado["edad"] is None:
         try:
             edad = int(mensaje)
             if edad < 1 or edad > 18:
-                return "📆 Ingresa una edad entre 1 y 18 años.", False
+                return "📆 Ingresa una edad entre 1 y 18 años.", False, None
             estado["edad"] = edad
-            return "👦 ¿Cuál es el sexo del menor? (escribe 'niño' o 'niña')", False
+            return "👦 ¿Cuál es el sexo del menor? (escribe 'niño' o 'niña')", False, None
         except ValueError:
-            return "⚠️ Edad no válida. Usa solo números (ej: 5).", False
+            return "⚠️ Edad no válida. Usa solo números (ej: 5).", False, None
 
     # Etapa 2: Sexo
     elif estado["sexo"] is None:
         sexo = mensaje.lower()
         if sexo not in ["niño", "niña"]:
-            return "🚻 Por favor, responde con 'niño' o 'niña'.", False
+            return "🚻 Por favor, responde con 'niño' o 'niña'.", False, None
         estado["sexo"] = sexo
-        return "⚖️ ¿Cuánto pesa el menor? (en kg, ej: 15.2)", False
+        return "⚖️ ¿Cuánto pesa el menor? (en kg, ej: 15.2)", False, None
 
     # Etapa 3: Peso
     elif estado["peso"] is None:
         try:
             peso = float(mensaje.replace(",", "."))
             if peso <= 0 or peso > 200:
-                return "⚠️ Peso fuera de rango. Ingresa un número realista.", False
+                return "⚠️ Peso fuera de rango. Ingresa un número realista.", False, None
             estado["peso"] = peso
-            return "📏 ¿Cuál es su talla? (en metros, ej: 1.10)", False
+            return "📏 ¿Cuál es su talla? (en metros, ej: 1.10)", False, None
         except ValueError:
-            return "🚫 Peso no válido. Usa números como 15.5.", False
+            return "🚫 Peso no válido. Usa números como 15.5.", False, None
 
     # Etapa 4: Talla
     elif estado["talla"] is None:
         try:
             talla = float(mensaje.replace(",", "."))
             if talla <= 0 or talla > 2.5:
-                return "📐 Talla no válida. Ej: 1.15", False
+                return "📐 Talla no válida. Ej: 1.15", False, None
             estado["talla"] = talla
 
             imc = calcular_imc(estado["peso"], estado["talla"])
@@ -113,14 +140,19 @@ def procesar_mensaje(mensaje):
             try:
                 with open(ruta_tabla, "r", encoding="utf-8") as f:
                     tablas = json.load(f)
-            except Exception:
-                return "❌ No se pudo leer la tabla de percentiles.", False
+            except FileNotFoundError:
+                return "❌ Error: No se encontró el archivo de tabla de percentiles (tablas_percentiles.json).", False, None
+            except json.JSONDecodeError:
+                return "❌ Error: El archivo de percentiles tiene un formato JSON inválido.", False, None
+            except PermissionError:
+                return "❌ Error: No se tienen permisos para leer el archivo de percentiles.", False, None
 
             if str(edad) not in tablas.get(sexo, {}):
-                return f"📊 No hay datos de percentiles para {sexo} de {edad} años.", False
+                return f"📊 No hay datos de percentiles para {sexo} de {edad} años. Solo disponible para edades 1-18.", False, None
 
             clasificacion = clasificar_por_percentil(imc, edad, sexo, tablas)
-            generar_grafico_percentil(imc, edad, sexo, tablas)
+            graph_id = generar_grafico_percentil(imc, edad, sexo, tablas)
+            estado["graph_id"] = graph_id
 
             mensaje = (
                 f"✅ El IMC del menor es: {round(imc, 2)} y se encuentra en la categoría: *{clasificacion.upper()}*.\n\n"
@@ -128,16 +160,16 @@ def procesar_mensaje(mensaje):
             mensaje += generar_reporte_resumen(imc, edad, estado["peso"], estado["talla"], clasificacion)
             mensaje += "\n\n🔁 ¿Deseas calcular otro IMC? Escribe 'reiniciar'."
 
-            return mensaje, True
+            return mensaje, True, graph_id
 
         except ValueError:
-            return "🚫 Talla no válida. Usa formato como 1.20", False
+            return "🚫 Talla no válida. Usa formato como 1.20", False, None
 
     # Comando: Reiniciar
     elif mensaje.lower() in ["reiniciar", "nuevo", "calcular otro"]:
         reiniciar_estado()
-        return "🔄 Comenzamos de nuevo... ¿Qué edad tiene el menor?", False
+        return "🔄 Comenzamos de nuevo... ¿Qué edad tiene el menor?", False, None
 
     # Cualquier otro texto no esperado
     else:
-        return "🤖 Aún estoy esperando el dato anterior. Si te confundiste, escribe 'reiniciar'.", False
+        return "🤖 Aún estoy esperando el dato anterior. Si te confundiste, escribe 'reiniciar'.", False, None
