@@ -91,7 +91,7 @@ def bienvenida() -> Dict[str, Any]:
     """
     reiniciar_estado()
     return {
-        "respuesta": "👋 ¡Hola! Soy tu asistente de IMC para niñas y niños.\n\nVamos a empezar. ¿Qué edad tiene el menor?",
+        "respuesta": "👋 ¡Hola! Soy tu asistente de IMC para niñas y niños.\n\nVamos a empezar. ¿Cómo se llama el menor?",
         "grafico": False,
         "graph_id": None
     }
