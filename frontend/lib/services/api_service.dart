@@ -1,35 +1,101 @@
+// lib/services/api_service.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  static const baseUrl = 'http://127.0.0.1:8000'; // Cambia si corres en Android
+  // ¡RECUERDA CAMBIAR ESTO SI PRUEBAS EN MÓVIL!
+  static const baseUrl = 'http://127.0.0.1:8000';
 
-  // Enviar mensaje al bot
-  static Future<Map<String, dynamic>> enviarMensaje(String mensaje, String? conversationId) async {
-    final res = await http.post(
-      Uri.parse('$baseUrl/mensaje'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'texto': mensaje,
-        'conversation_id': conversationId, // Enviar el ID
-      }),
-    );
-    return jsonDecode(res.body);
+  // --- NUEVO: Helper para Headers ---
+  static Map<String, String> _getAuthHeaders(String token) {
+    return {
+      'Content-Type': 'application/json; charset=UTF-OCHO',
+      'Authorization': 'Bearer $token',
+    };
   }
 
-  // Obtener gráfico IMC por ID
+  // --- NUEVO: Endpoints de Auth ---
+  static Future<String> login(String email, String password) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/token'),
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: {'username': email, 'password': password},
+    );
+
+    if (res.statusCode == 200) {
+      final data = jsonDecode(res.body);
+      return data['access_token'];
+    } else {
+      throw Exception('Failed to login');
+    }
+  }
+
+  static Future<void> register(String email, String password) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/users/register'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email, 'password': password}),
+    );
+
+    if (res.statusCode != 200) {
+      throw Exception('Failed to register');
+    }
+  }
+
+  // --- NUEVO: Endpoints de Paciente ---
+  static Future<List<dynamic>> getPacientes(String token) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/pacientes/me'),
+      headers: _getAuthHeaders(token),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(utf8.decode(res.bodyBytes));
+    } else {
+      throw Exception('Failed to load pacientes');
+    }
+  }
+
+  static Future<Map<String, dynamic>> createPaciente(String token, String nombre, String fechaNacimiento, String sexo) async {
+     final res = await http.post(
+      Uri.parse('$baseUrl/pacientes/crear'),
+      headers: _getAuthHeaders(token),
+      body: jsonEncode({
+        'nombre': nombre,
+        'fecha_nacimiento': fechaNacimiento,
+        'sexo': sexo,
+      }),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(utf8.decode(res.bodyBytes));
+    } else {
+      throw Exception('Failed to create paciente');
+    }
+  }
+
+  // --- MODIFICADO: Endpoint de Chat ---
+  static Future<Map<String, dynamic>> enviarMensaje(String token, String mensaje, int pacienteId, String? conversationId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/mensaje'),
+      headers: _getAuthHeaders(token),
+      body: jsonEncode({
+        'texto': mensaje,
+        'paciente_id': pacienteId,
+        'conversation_id': conversationId,
+      }),
+    );
+    
+    if (res.statusCode == 200) {
+      return jsonDecode(utf8.decode(res.bodyBytes));
+    } else {
+      throw Exception('Failed to send message');
+    }
+  }
+
+  // --- Endpoint de Gráfico (sin cambios) ---
   static String getGraficoUrl(String graphId) {
     return '$baseUrl/grafico/$graphId';
   }
 
-  // Reiniciar estado conversacional (mantenido por compatibilidad, aunque ahora se usa getBienvenida)
-  static Future<void> reiniciar() async {
-    await http.get(Uri.parse('$baseUrl/reiniciar'));
-  }
-
-  // ✅ Obtener mensaje de bienvenida
-  static Future<Map<String, dynamic>> getBienvenida() async {
-    final res = await http.get(Uri.parse('$baseUrl/bienvenida'));
-    return jsonDecode(res.body); // Ahora esto incluirá el conversation_id
-  }
+  // --- Endpoint /bienvenida (Eliminado) ---
+  // (No más getBienvenida ni reiniciar)
 }

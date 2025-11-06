@@ -5,4 +5,5 @@ matplotlib==3.8.2
 python-multipart==0.0.6
 SQLAlchemy==2.0.25  # Añadir
 psycopg2-binary==2.9.9 # Añadir (para Postgres)
-# O usa 'sqlite' que ya viene con Python para prueba
+passlib[bcrypt]==1.7.4  # <-- AÑADIR ESTA LÍNEA
+python-jose[cryptography]==3.3.0 # <-- AÑADIR ESTA LÍNEA
