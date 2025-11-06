@@ -9,7 +9,7 @@ class ApiService {
   // --- NUEVO: Helper para Headers ---
   static Map<String, String> _getAuthHeaders(String token) {
     return {
-      'Content-Type': 'application/json; charset=UTF-OCHO',
+      'Content-Type': 'application/json; charset=UTF-8', // <-- CORREGIDO (era UTF-OCHO)
       'Authorization': 'Bearer $token',
     };
   }
@@ -38,7 +38,13 @@ class ApiService {
     );
 
     if (res.statusCode != 200) {
-      throw Exception('Failed to register');
+       // Intenta decodificar el error del backend
+      try {
+        final body = jsonDecode(res.body);
+        throw Exception(body['detail'] ?? 'Failed to register');
+      } catch (e) {
+        throw Exception('Failed to register');
+      }
     }
   }
 
@@ -58,7 +64,7 @@ class ApiService {
   static Future<Map<String, dynamic>> createPaciente(String token, String nombre, String fechaNacimiento, String sexo) async {
      final res = await http.post(
       Uri.parse('$baseUrl/pacientes/crear'),
-      headers: _getAuthHeaders(token),
+      headers: _getAuthHeaders(token), // <-- Esta función causaba el error
       body: jsonEncode({
         'nombre': nombre,
         'fecha_nacimiento': fechaNacimiento,
@@ -95,7 +101,4 @@ class ApiService {
   static String getGraficoUrl(String graphId) {
     return '$baseUrl/grafico/$graphId';
   }
-
-  // --- Endpoint /bienvenida (Eliminado) ---
-  // (No más getBienvenida ni reiniciar)
 }

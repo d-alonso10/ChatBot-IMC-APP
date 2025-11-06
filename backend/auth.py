@@ -19,7 +19,9 @@ def verificar_password(plain_password: str, hashed_password: str) -> bool:
 
 def hashear_password(password: str) -> str:
     """Retorna el hash de una contraseña."""
-    return pwd_context.hash(password)
+    # Truncar la contraseña a 72 bytes para compatibilidad con bcrypt
+    password_bytes = password.encode('utf-8')[:72]
+    return pwd_context.hash(password_bytes)
 
 def crear_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """Crea un nuevo token JWT."""

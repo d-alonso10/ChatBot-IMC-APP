@@ -1,6 +1,5 @@
-import 'dart:async';
+// lib/screens/splash_screen.dart
 import 'package:flutter/material.dart';
-import 'chat_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -34,11 +33,16 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
+    // --- TEMPORIZADOR ELIMINADO ---
+    // Ya no necesitamos el Timer, main.dart se encarga de la navegación.
+    /*
     Timer(const Duration(seconds: 3), () {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const ChatScreen()),
       );
     });
+    */
+    // --- FIN DE LA ELIMINACIÓN ---
   }
 
   @override

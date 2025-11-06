@@ -17,7 +17,7 @@ class Paciente(PacienteBase):
     tutor_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True # <-- CORREGIDO (antes orm_mode)
 
 # --- Schemas de User (Tutor) ---
 class UserBase(BaseModel):
@@ -31,7 +31,7 @@ class User(UserBase):
     pacientes: List[Paciente] = []
 
     class Config:
-        orm_mode = True
+        from_attributes = True # <-- CORREGIDO (antes orm_mode)
 
 # --- Schemas de Autenticación (Token) ---
 class Token(BaseModel):
