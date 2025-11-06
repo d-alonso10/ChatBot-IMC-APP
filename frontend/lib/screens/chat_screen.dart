@@ -1,3 +1,4 @@
+// lib/screens/chat_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
@@ -7,6 +8,7 @@ import '../widgets/graph_image.dart';
 import '../widgets/chat_input_field.dart';
 
 class ChatScreen extends StatefulWidget {
+  // Ya no recibe un Paciente, lo toma del Provider
   const ChatScreen({super.key});
 
   @override
@@ -19,10 +21,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    // Cargar mensaje de bienvenida
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ChatProvider>().loadWelcomeMessage();
-    });
+    // El mensaje de bienvenida ahora se carga desde el constructor del ChatProvider
   }
 
   @override
@@ -45,34 +44,21 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Obtener el nombre del paciente desde el Provider
+    final pacienteNombre = Provider.of<ChatProvider>(context, listen: false).paciente.nombre;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F5FB),
       appBar: AppBar(
         backgroundColor: const Color(0xFF7E57C2),
         elevation: 8,
-        shadowColor: Colors.deepPurple.withOpacity(0.3),
-        centerTitle: false,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.medical_services, color: Colors.white, size: 22),
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              "Asistente IMC Pediátrico",
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
-                color: Colors.white,
-              ),
-            ),
-          ],
+        title: Text(
+          "Cálculo para $pacienteNombre", // Título dinámico
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
       ),
       body: SafeArea(
@@ -81,20 +67,9 @@ class _ChatScreenState extends State<ChatScreen> {
             Expanded(
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      const Color(0xFFF8F5FB),
-                      const Color(0xFFEDE7F6).withOpacity(0.4),
-                    ],
-                  ),
-                ),
                 child: Consumer<ChatProvider>(
                   builder: (context, chatProvider, child) {
-                    // Auto-scroll cuando cambian los mensajes
-                    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+                    _scrollToBottom();
                     
                     return ListView.builder(
                       controller: _scrollController,
@@ -111,7 +86,6 @@ class _ChatScreenState extends State<ChatScreen> {
                           return GraphImage(imageUrl: msg.imageUrl!);
                         }
                         
-                        // Mostrar texto en animación si está escribiendo
                         if (chatProvider.isBotTyping && 
                             i == chatProvider.messages.length - 1 && 
                             chatProvider.typingText.isNotEmpty) {
@@ -135,6 +109,7 @@ class _ChatScreenState extends State<ChatScreen> {
             Consumer<ChatProvider>(
               builder: (context, chatProvider, child) {
                 return ChatInputField(
+                  // Modificamos onSendMessage para que no necesite pacienteId
                   onSendMessage: (text) => chatProvider.sendMessage(text),
                   isEnabled: !chatProvider.isBotTyping,
                 );
