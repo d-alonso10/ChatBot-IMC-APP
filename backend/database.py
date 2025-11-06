@@ -9,6 +9,6 @@ DATABASE_URL = "postgresql://admin:postgres@localhost/imc_db"
 # DATABASE_URL = "sqlite:///./test.db"
 # -----------------------------------------------------------
 
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, client_encoding='latin1')
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
