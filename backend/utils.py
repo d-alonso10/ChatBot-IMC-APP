@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import os
 import uuid
 from typing import Dict, Any
+from sqlalchemy.orm import Session
+import models  # <--- IMPORTANTE: Añadir import de models
 
 def calcular_imc(peso: float, talla: float) -> float:
     """
@@ -59,8 +61,15 @@ def generar_grafico_percentil(imc_usuario: float, edad: int, sexo: str, tablas: 
         str: ID único del gráfico generado (UUID)
     """
     edad_int = int(edad)
-    edades = sorted([int(k) for k in tablas[sexo].keys()])
-
+    
+    # Asegurarse de que las claves sean strings para la búsqueda
+    edades_str = tablas.get(sexo, {}).keys()
+    if not edades_str:
+        raise KeyError(f"No se encontraron datos de percentiles para el sexo: {sexo}")
+        
+    edades = sorted([int(k) for k in edades_str])
+    
+    # Convertir edades a string al acceder al dict
     p5 = [tablas[sexo][str(e)]["p5"] for e in edades]
     p85 = [tablas[sexo][str(e)]["p85"] for e in edades]
     p95 = [tablas[sexo][str(e)]["p95"] for e in edades]
@@ -74,15 +83,21 @@ def generar_grafico_percentil(imc_usuario: float, edad: int, sexo: str, tablas: 
     plt.scatter([edad_int], [imc_usuario], color="red", s=150, edgecolors="black",
                 linewidths=2, zorder=5, label=f"Niño/a ({imc_usuario:.1f})")
 
-    # Recomendación visual
-    if imc_usuario < tablas[sexo][str(edad)]["p5"]:
+    # Recomendación visual (usar str(edad) para buscar)
+    try:
+        datos_edad_actual = tablas[sexo][str(edad)]
+    except KeyError:
+         raise KeyError(f"No se encontraron datos de percentiles para la edad: {edad}")
+
+    if imc_usuario < datos_edad_actual["p5"]:
         texto = "Recomendación: Bajo peso, evalúe con pediatra."
-    elif imc_usuario < tablas[sexo][str(edad)]["p85"]:
+    elif imc_usuario < datos_edad_actual["p85"]:
         texto = "Recomendación: Peso saludable, siga con buenos hábitos."
-    elif imc_usuario < tablas[sexo][str(edad)]["p95"]:
+    elif imc_usuario < datos_edad_actual["p95"]:
         texto = "Recomendación: Riesgo de sobrepeso, controle dieta y actividad."
     else:
         texto = "Recomendación: Obesidad, consultar especialista."
+
 
     # Mostrar recomendación sobre el gráfico
     plt.text(edad_int + 0.5, imc_usuario + 0.5, texto,
@@ -107,3 +122,41 @@ def generar_grafico_percentil(imc_usuario: float, edad: int, sexo: str, tablas: 
     plt.close()
     
     return graph_id
+
+# --- NUEVA FUNCIÓN AÑADIDA ---
+
+def cargar_percentiles_db(db: Session) -> Dict[str, Any]:
+    """
+    Carga los datos de percentiles desde la base de datos y los formatea
+    en el diccionario anidado que espera la lógica del chatbot.
+    
+    Args:
+        db: Sesión de base de datos
+    
+    Returns:
+        Dict[str, Any]: Diccionario formateado {'niño': {'1': {...}, ...}, 'niña': ...}
+    """
+    tablas = {"niño": {}, "niña": {}}
+    try:
+        todos_los_percentiles = db.query(models.Percentil).all()
+        
+        if not todos_los_percentiles:
+            raise Exception("Base de datos de percentiles vacía. ¿Ejecutaste importar_datos.py?")
+
+        for p in todos_los_percentiles:
+            edad_str = str(p.edad)
+            if p.sexo not in tablas:
+                tablas[p.sexo] = {}
+            
+            tablas[p.sexo][edad_str] = {
+                "p5": p.p5,
+                "p85": p.p85,
+                "p95": p.p95
+            }
+        
+        return tablas
+        
+    except Exception as e:
+        print(f"Error crítico al cargar percentiles desde la BD: {e}")
+        # Retornar vacío hará que el chatbot falle con un error controlado
+        return {"niño": {}, "niña": {}}
