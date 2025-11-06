@@ -1,12 +1,20 @@
 # backend/main.py
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from chatbot import procesar_mensaje, reiniciar_estado
+from chatbot import procesar_mensaje
 import os
 from typing import Dict, Any
+
+# Importar modelos y base de datos
+import models
+from database import SessionLocal, engine
+
+# Crear las tablas en la base de datos
+models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="API IMC Pediátrico",
@@ -27,29 +35,45 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Dependencia para obtener la sesión de BD
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 # Modelo de entrada para el chatbot
 class Mensaje(BaseModel):
     texto: str
+    conversation_id: str | None = None  # El frontend debe enviar esto
 
 class RespuestaChat(BaseModel):
     respuesta: str
     grafico: bool
     graph_id: str | None = None
+    conversation_id: str | None = None
 
 # Ruta para enviar mensajes
 @app.post("/mensaje", response_model=RespuestaChat)
-async def recibir_mensaje(msg: Mensaje) -> Dict[str, Any]:
+async def recibir_mensaje(msg: Mensaje, db: Session = Depends(get_db)) -> Dict[str, Any]:
     """
     Procesa un mensaje del usuario y retorna la respuesta del chatbot.
     
     Args:
-        msg: Mensaje del usuario
+        msg: Mensaje del usuario con conversation_id
+        db: Sesión de base de datos
     
     Returns:
-        Dict con respuesta, indicador de gráfico y ID del gráfico si aplica
+        Dict con respuesta, indicador de gráfico, ID del gráfico y conversation_id
     """
-    respuesta, mostrar_grafico, graph_id = procesar_mensaje(msg.texto)
-    return {"respuesta": respuesta, "grafico": mostrar_grafico, "graph_id": graph_id}
+    respuesta, mostrar_grafico, graph_id, conv_id = procesar_mensaje(db, msg.texto, msg.conversation_id)
+    return {
+        "respuesta": respuesta, 
+        "grafico": mostrar_grafico, 
+        "graph_id": graph_id,
+        "conversation_id": conv_id
+    }
 
 # Ruta para obtener un gráfico específico por su ID
 @app.get("/grafico/{graph_id}")
@@ -68,30 +92,24 @@ async def obtener_grafico(graph_id: str):
         return FileResponse(path, media_type="image/png")
     return JSONResponse(content={"error": "Gráfico no disponible."}, status_code=404)
 
-# Ruta para reiniciar el estado conversacional
-@app.get("/reiniciar")
-def reiniciar() -> Dict[str, str]:
-    """
-    Reinicia el estado conversacional del chatbot.
-    
-    Returns:
-        Dict con mensaje de confirmación
-    """
-    reiniciar_estado()
-    return {"mensaje": "Estado reiniciado correctamente."}
-
-# Ruta de bienvenida inicial
+# Ruta de bienvenida inicial - ahora crea una nueva conversación
 @app.get("/bienvenida")
-def bienvenida() -> Dict[str, Any]:
+def bienvenida(db: Session = Depends(get_db)) -> Dict[str, Any]:
     """
-    Retorna el mensaje de bienvenida y reinicia el estado.
+    Crea una nueva conversación y retorna el mensaje de bienvenida.
     
     Returns:
-        Dict con mensaje de bienvenida y estado inicial
+        Dict con mensaje de bienvenida, estado inicial y conversation_id
     """
-    reiniciar_estado()
+    # Crear una nueva conversación en la base de datos
+    nuevo_calculo = models.Calculo()
+    db.add(nuevo_calculo)
+    db.commit()
+    db.refresh(nuevo_calculo)
+
     return {
         "respuesta": "👋 ¡Hola! Soy tu asistente de IMC para niñas y niños.\n\nVamos a empezar. ¿Cómo se llama el menor?",
         "grafico": False,
-        "graph_id": None
+        "graph_id": None,
+        "conversation_id": nuevo_calculo.id  # Devuelve el nuevo ID de conversación
     }

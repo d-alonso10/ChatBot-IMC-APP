@@ -4,26 +4,9 @@ import re
 import random
 import unicodedata
 from typing import Dict, Tuple, Optional, Any
-from utils import calcular_imc, generar_grafico_percentil, clasificar_por_percentil
-
-estado: Dict[str, Optional[Any]] = {
-    "nombre": None,
-    "edad": None,
-    "sexo": None,
-    "peso": None,
-    "talla": None,
-    "graph_id": None,
-    "intentos_fallidos": 0
-}
-
-def reiniciar_estado() -> None:
-    """
-    Reinicia el estado conversacional del chatbot a valores iniciales.
-    """
-    global estado
-    for key in estado:
-        estado[key] = None
-    estado["intentos_fallidos"] = 0
+from sqlalchemy.orm import Session
+import models
+from utils import calcular_imc, generar_grafico_percentil, clasificar_por_percentil, cargar_percentiles_db
 
 def normalizar_texto(texto: str) -> str:
     """
@@ -130,104 +113,122 @@ def generar_reporte_resumen(imc: float, edad: int, peso: float, talla: float, cl
 
     return resumen + consejos
 
-def procesar_mensaje(mensaje: str) -> Tuple[str, bool, Optional[str]]:
+def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None) -> Tuple[str, bool, Optional[str], str]:
     """
     Procesa el mensaje del usuario y gestiona el flujo conversacional del chatbot.
     
     Args:
+        db: Sesión de base de datos
         mensaje: Texto enviado por el usuario
+        conversation_id: ID de la conversación existente (opcional)
     
     Returns:
-        Tuple[str, bool, Optional[str]]: (respuesta_texto, mostrar_grafico, graph_id)
+        Tuple[str, bool, Optional[str], str]: (respuesta_texto, mostrar_grafico, graph_id, conversation_id)
     """
-    global estado
-
     mensaje = mensaje.strip()
     if not mensaje:
-        return "No recibí nada 😅. Por favor, escribe un dato válido.", False, None
+        return "No recibí nada 😅. Por favor, escribe un dato válido.", False, None, conversation_id or ""
 
-    # Etapa 0: Nombre (opcional)
-    if estado["nombre"] is None:
+    # Obtener o crear la conversación
+    if not conversation_id:
+        # Si no hay ID, crea una nueva conversación
+        calculo = models.Calculo()
+        db.add(calculo)
+        db.commit()
+        db.refresh(calculo)
+        conversation_id = calculo.id
+    else:
+        calculo = db.query(models.Calculo).filter(models.Calculo.id == conversation_id).first()
+        if not calculo:
+            # Si el ID es inválido, crea uno nuevo
+            calculo = models.Calculo()
+            db.add(calculo)
+            db.commit()
+            db.refresh(calculo)
+            conversation_id = calculo.id
+
+    # Comando: Reiniciar
+    if normalizar_texto(mensaje) in ["reiniciar", "nuevo", "calcular otro", "empezar", "comenzar", "cancelar", "inicio", "otro calculo", "reset", "volver"]:
+        # Crea una nueva conversación
+        nuevo_calculo = models.Calculo()
+        db.add(nuevo_calculo)
+        db.commit()
+        db.refresh(nuevo_calculo)
+        return "🔄 ¡Perfecto! Comenzamos de nuevo. ¿Cómo se llama el menor?", False, None, nuevo_calculo.id
+
+    # Etapa 0: Nombre
+    if calculo.nombre is None:
         nombre = mensaje.strip()
         if len(nombre) > 50:
-            return "😅 El nombre es muy largo. Intenta con algo más corto.", False, None
-        estado["nombre"] = nombre
-        return f"¡Perfecto! 😊 Ahora, ¿qué edad tiene {nombre}? (en años)", False, None
+            return "😅 El nombre es muy largo. Intenta con algo más corto.", False, None, conversation_id
+        
+        calculo.nombre = nombre
+        db.commit()
+        return f"¡Perfecto! 😊 Ahora, ¿qué edad tiene {nombre}? (en años)", False, None, conversation_id
 
     # Etapa 1: Edad
-    elif estado["edad"] is None:
+    elif calculo.edad is None:
         numero = extraer_numero(mensaje)
         if numero is None:
-            estado["intentos_fallidos"] += 1
-            if estado["intentos_fallidos"] >= 3:
-                return "🤔 Parece que hay confusión. La edad debe ser un número entero. Por ejemplo, si tiene 5 años, escribe solo '5'. ¿Quieres reiniciar? Escribe 'reiniciar'.", False, None
-            return "⚠️ La edad debe ser un número entero. Ejemplo: 5", False, None
+            return "⚠️ La edad debe ser un número entero. Ejemplo: 5", False, None, conversation_id
         
         edad = int(numero)
         if edad < 1 or edad > 18:
-            estado["intentos_fallidos"] += 1
-            return "📆 Por favor, ingresa una edad entre 1 y 18 años.", False, None
+            return "📆 Por favor, ingresa una edad entre 1 y 18 años.", False, None, conversation_id
         
-        estado["edad"] = edad
-        estado["intentos_fallidos"] = 0
+        calculo.edad = edad
+        db.commit()
         
         # Respuestas variadas
         respuestas = [
             f"Entendido, {edad} años. ¿Es niño o niña?",
             f"Perfecto, {edad} años. Ahora dime, ¿cuál es su sexo? (niño/niña)",
-            f"Muy bien. {estado['nombre']} tiene {edad} años. ¿Es niño o niña?"
+            f"Muy bien. {calculo.nombre} tiene {edad} años. ¿Es niño o niña?"
         ]
-        return random.choice(respuestas), False, None
+        return random.choice(respuestas), False, None, conversation_id
 
     # Etapa 2: Sexo
-    elif estado["sexo"] is None:
+    elif calculo.sexo is None:
         sexo_normalizado = normalizar_texto(mensaje)
         
         # Aceptar variaciones: niño, nino, masculino, varon, m, niña, nina, femenino, f
         if sexo_normalizado in ["nino", "niño", "masculino", "varon", "m", "hombre", "chico"]:
-            estado["sexo"] = "niño"
+            sexo_validado = "niño"
         elif sexo_normalizado in ["nina", "niña", "femenino", "f", "mujer", "chica"]:
-            estado["sexo"] = "niña"
+            sexo_validado = "niña"
         else:
-            estado["intentos_fallidos"] += 1
-            if estado["intentos_fallidos"] >= 3:
-                return "🤔 No logro entender. Por favor responde con la palabra 'niño' o 'niña'. Por ejemplo, si es niño, escribe solo 'niño'. ¿Quieres reiniciar? Escribe 'reiniciar'.", False, None
-            return "🚻 Por favor, responde con 'niño' o 'niña'.", False, None
+            return "🚻 Por favor, responde con 'niño' o 'niña'.", False, None, conversation_id
         
-        estado["intentos_fallidos"] = 0
+        calculo.sexo = sexo_validado
+        db.commit()
         
         # Respuestas variadas con confirmación sutil
-        sexo_confirmado = "niño" if estado["sexo"] == "niño" else "niña"
         respuestas = [
-            f"Ok, {sexo_confirmado}. Ahora, ¿cuánto pesa? (en kg, ejemplo: 15.5)",
-            f"Entendido, {sexo_confirmado}. ¿Cuál es su peso en kilogramos? (ej: 20.3)",
+            f"Ok, {sexo_validado}. Ahora, ¿cuánto pesa? (en kg, ejemplo: 15.5)",
+            f"Entendido, {sexo_validado}. ¿Cuál es su peso en kilogramos? (ej: 20.3)",
             f"Perfecto. Siguiente dato: ¿cuánto pesa en kg?"
         ]
-        return random.choice(respuestas), False, None
+        return random.choice(respuestas), False, None, conversation_id
 
     # Etapa 3: Peso
-    elif estado["peso"] is None:
+    elif calculo.peso is None:
         numero = extraer_numero(mensaje)
         if numero is None:
-            estado["intentos_fallidos"] += 1
-            if estado["intentos_fallidos"] >= 3:
-                return "🤔 El peso debe ser un número. Por ejemplo, si pesa 15 kilos y medio, escribe '15.5'. ¿Necesitas reiniciar? Escribe 'reiniciar'.", False, None
-            return "🚫 El peso debe ser un número. Puedes usar decimales (ejemplo: 15.5).", False, None
+            return "🚫 El peso debe ser un número. Puedes usar decimales (ejemplo: 15.5).", False, None, conversation_id
         
         peso = numero
         
         # Validación de rango razonable según edad
-        edad = estado["edad"]
+        edad = calculo.edad
         if peso <= 0 or peso > 200:
-            estado["intentos_fallidos"] += 1
-            return "⚠️ Peso fuera de rango razonable (0-200 kg). Verifica el dato.", False, None
+            return "⚠️ Peso fuera de rango razonable (0-200 kg). Verifica el dato.", False, None, conversation_id
         
         # Advertencia si el peso parece inusual para la edad
         if edad <= 5 and peso > 30:
-            return f"⚠️ ¿{peso} kg para {edad} años? Parece alto. Si es correcto, envíalo de nuevo para confirmar.", False, None
+            return f"⚠️ ¿{peso} kg para {edad} años? Parece alto. Si es correcto, envíalo de nuevo para confirmar.", False, None, conversation_id
         
-        estado["peso"] = peso
-        estado["intentos_fallidos"] = 0
+        calculo.peso = peso
+        db.commit()
         
         # Respuestas variadas con opción de cm o metros
         respuestas = [
@@ -235,16 +236,13 @@ def procesar_mensaje(mensaje: str) -> Tuple[str, bool, Optional[str]]:
             f"Perfecto, {peso} kg. Ahora la talla (en metros: 1.15 o en cm: 115)",
             f"Entendido, {peso} kg. ¿Y la estatura? (puedes usar metros como 1.20 o cm como 120)"
         ]
-        return random.choice(respuestas), False, None
+        return random.choice(respuestas), False, None, conversation_id
 
     # Etapa 4: Talla
-    elif estado["talla"] is None:
+    elif calculo.talla is None:
         numero = extraer_numero(mensaje)
         if numero is None:
-            estado["intentos_fallidos"] += 1
-            if estado["intentos_fallidos"] >= 3:
-                return "🤔 La talla debe ser un número. Por ejemplo, si mide 1 metro y 10 centímetros, escribe '1.10' o '110'. ¿Reiniciamos? Escribe 'reiniciar'.", False, None
-            return "📐 La talla debe ser un número en metros (ej: 1.15) o en cm (ej: 115).", False, None
+            return "📐 La talla debe ser un número en metros (ej: 1.15) o en cm (ej: 115).", False, None, conversation_id
         
         talla = numero
         
@@ -254,68 +252,49 @@ def procesar_mensaje(mensaje: str) -> Tuple[str, bool, Optional[str]]:
                 talla = talla / 100
                 confirmacion = f"📏 Detecté {numero} cm. Lo convertí a {talla} metros. "
             else:
-                estado["intentos_fallidos"] += 1
-                return "📐 Talla fuera de rango. Ingresa en metros (ejemplo: 1.15).", False, None
+                return "📐 Talla fuera de rango. Ingresa en metros (ejemplo: 1.15).", False, None, conversation_id
         else:
             confirmacion = ""
         
         if talla <= 0 or talla > 2.5:
-            estado["intentos_fallidos"] += 1
-            return "📐 Talla no válida. Debe estar entre 0 y 2.5 metros. Ejemplo: 1.15", False, None
+            return "📐 Talla no válida. Debe estar entre 0 y 2.5 metros. Ejemplo: 1.15", False, None, conversation_id
         
-        estado["talla"] = talla
-        estado["intentos_fallidos"] = 0
+        calculo.talla = talla
         
         try:
-            imc = calcular_imc(estado["peso"], estado["talla"])
-            edad = estado["edad"]
-            sexo = estado["sexo"]
+            # Cálculo final
+            tablas_percentiles = cargar_percentiles_db(db)
+            imc = calcular_imc(calculo.peso, calculo.talla)
+            clasificacion = clasificar_por_percentil(imc, calculo.edad, calculo.sexo, tablas_percentiles)
+            graph_id = generar_grafico_percentil(imc, calculo.edad, calculo.sexo, tablas_percentiles)
 
-            ruta_tabla = os.path.join("data", "tablas_percentiles.json")
-            try:
-                with open(ruta_tabla, "r", encoding="utf-8") as f:
-                    tablas = json.load(f)
-            except FileNotFoundError:
-                return "❌ Error: No se encontró el archivo de tabla de percentiles (tablas_percentiles.json).", False, None
-            except json.JSONDecodeError:
-                return "❌ Error: El archivo de percentiles tiene un formato JSON inválido.", False, None
-            except PermissionError:
-                return "❌ Error: No se tienen permisos para leer el archivo de percentiles.", False, None
+            # Guardar resultados en la BD
+            calculo.imc = imc
+            calculo.clasificacion = clasificacion
+            calculo.graph_id = graph_id
+            db.commit()
 
-            if str(edad) not in tablas.get(sexo, {}):
-                return f"📊 No hay datos de percentiles para {sexo} de {edad} años. Solo disponible para edades 1-18.", False, None
-
-            clasificacion = clasificar_por_percentil(imc, edad, sexo, tablas)
-            graph_id = generar_grafico_percentil(imc, edad, sexo, tablas)
-            estado["graph_id"] = graph_id
-
-            nombre = estado.get("nombre")
             # Frases de transición aleatorias
             transiciones = [
                 "✨ ¡Listo! Déjame calcular...",
                 "📊 Perfecto. Procesando datos...",
                 "✅ ¡Entendido! Calculando el IMC..."
             ]
-            mensaje_resultado = confirmacion if 'confirmacion' in locals() else ""
+            mensaje_resultado = confirmacion
             mensaje_resultado += (
                 f"{random.choice(transiciones)}\n\n"
                 f"✅ El IMC es: {round(imc, 2)} - Categoría: *{clasificacion.upper()}*\n"
             )
-            mensaje_resultado += generar_reporte_resumen(imc, edad, estado["peso"], estado["talla"], clasificacion, nombre)
+            mensaje_resultado += generar_reporte_resumen(imc, calculo.edad, calculo.peso, calculo.talla, clasificacion, calculo.nombre)
             mensaje_resultado += "\n\n🔁 ¿Deseas calcular otro IMC? Escribe 'reiniciar'."
 
-            return mensaje_resultado, True, graph_id
+            return mensaje_resultado, True, graph_id, conversation_id
 
         except ValueError:
-            estado["intentos_fallidos"] += 1
-            return "🚫 Talla no válida. Usa formato como 1.20 (en metros).", False, None
+            return "🚫 Talla no válida. Usa formato como 1.20 (en metros).", False, None, conversation_id
         except Exception as e:
-            return f"❌ Error inesperado al procesar los datos: {str(e)}", False, None
+            return f"❌ Error inesperado al procesar los datos: {str(e)}", False, None, conversation_id
 
-    # Comando: Reiniciar
-    if normalizar_texto(mensaje) in ["reiniciar", "nuevo", "calcular otro", "empezar", "comenzar", "cancelar", "inicio", "otro calculo", "reset", "volver"]:
-        reiniciar_estado()
-        return "🔄 ¡Perfecto! Comenzamos de nuevo. ¿Cómo se llama el menor?", False, None
-
-    # Cualquier otro texto no esperado
-    return "🤖 Aún estoy esperando el dato anterior. Si necesitas ayuda, escribe 'reiniciar'.", False, None
+    # Si la conversación ya terminó
+    else:
+        return "📊 Cálculo completado. Escribe 'reiniciar' para empezar de nuevo.", False, None, conversation_id

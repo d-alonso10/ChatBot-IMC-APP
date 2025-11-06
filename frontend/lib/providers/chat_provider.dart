@@ -19,6 +19,7 @@ class ChatMessage {
 
 class ChatProvider extends ChangeNotifier {
   final List<ChatMessage> _messages = [];
+  String? _conversationId; // ¡AÑADIR ESTO!
   bool _isBotTyping = false;
   String _typingText = '';
   int _typingIndex = 0;
@@ -26,6 +27,7 @@ class ChatProvider extends ChangeNotifier {
   List<ChatMessage> get messages => List.unmodifiable(_messages);
   bool get isBotTyping => _isBotTyping;
   String get typingText => _typingText;
+  String? get conversationId => _conversationId; // Getter para acceder al ID
 
   Future<void> loadWelcomeMessage() async {
     try {
@@ -34,6 +36,7 @@ class ChatProvider extends ChangeNotifier {
         text: response['respuesta'],
         isUser: false,
       ));
+      _conversationId = response['conversation_id']; // Guardar el ID
       notifyListeners();
     } catch (e) {
       _addErrorMessage('Error al cargar el mensaje de bienvenida. Verifica tu conexión.');
@@ -97,9 +100,13 @@ class ChatProvider extends ChangeNotifier {
     startTypingIndicator();
 
     try {
-      final response = await ApiService.enviarMensaje(text);
+      // ¡Enviar el ID guardado!
+      final response = await ApiService.enviarMensaje(text, _conversationId);
 
-      if (response == null || response['respuesta'] == null) {
+      // Guardar el ID por si se actualiza (en caso de reinicio)
+      _conversationId = response['conversation_id'];
+
+      if (response['respuesta'] == null) {
         throw Exception('Respuesta inválida del servidor');
       }
 
@@ -134,6 +141,7 @@ class ChatProvider extends ChangeNotifier {
 
   void clearMessages() {
     _messages.clear();
+    _conversationId = null; // Reiniciar también el conversation_id
     _isBotTyping = false;
     _typingText = '';
     _typingIndex = 0;

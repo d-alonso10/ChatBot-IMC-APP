@@ -3,3 +3,6 @@ uvicorn[standard]==0.27.0
 pydantic==2.5.3
 matplotlib==3.8.2
 python-multipart==0.0.6
+SQLAlchemy==2.0.25  # Añadir
+psycopg2-binary==2.9.9 # Añadir (para Postgres)
+# O usa 'sqlite' que ya viene con Python para prueba
