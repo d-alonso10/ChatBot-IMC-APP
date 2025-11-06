@@ -14,7 +14,7 @@ class PacienteProvider extends ChangeNotifier {
   Future<void> fetchPacientes() async {
     if (_authToken == null) return;
     try {
-      final data = await ApiService.getPacientes(_authToken!);
+      final data = await ApiService.getPacientes(_authToken);
       _pacientes = data.map((item) => Paciente.fromJson(item)).toList();
       notifyListeners();
     } catch (e) {
@@ -27,7 +27,7 @@ class PacienteProvider extends ChangeNotifier {
     if (_authToken == null) return;
     try {
       final nuevoPacienteData = await ApiService.createPaciente(
-        _authToken!,
+        _authToken,
         nombre,
         fechaNacimiento.toIso8601String().split('T')[0], // Formato YYYY-MM-DD
         sexo,
