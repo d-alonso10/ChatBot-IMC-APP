@@ -37,6 +37,7 @@ dependencies:
   flutter_staggered_animations: ^1.1.1 # <-- AÑADIR ESTA LÍNEA
 
   cupertino_icons: ^1.0.6
+  intl: ^0.19.0
 
 
 dev_dependencies:

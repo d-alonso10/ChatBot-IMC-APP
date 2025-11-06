@@ -1,9 +1,10 @@
 import matplotlib.pyplot as plt
 import os
 import uuid
-from typing import Dict, Any
+from typing import Dict, Any, List
+from datetime import date
 from sqlalchemy.orm import Session
-import models  # <--- IMPORTANTE: Añadir import de models
+import models  # <--- IMPORTANTE: Añadir import de models 
 
 def calcular_imc(peso: float, talla: float) -> float:
     """
@@ -160,3 +161,85 @@ def cargar_percentiles_db(db: Session) -> Dict[str, Any]:
         print(f"Error crítico al cargar percentiles desde la BD: {e}")
         # Retornar vacío hará que el chatbot falle con un error controlado
         return {"niño": {}, "niña": {}}
+    
+def _calcular_edad_en_meses(fecha_nacimiento: date, fecha_calculo: date) -> int:
+    """Calcula la edad en meses en una fecha específica."""
+    return (fecha_calculo.year - fecha_nacimiento.year) * 12 + (fecha_calculo.month - fecha_nacimiento.month)
+
+def generar_grafico_historial(paciente: models.Paciente, historial: List[models.Calculo], db: Session) -> str:
+    """
+    Genera un gráfico de percentiles con la LÍNEA DE HISTORIAL completa del paciente.
+    """
+    # 1. Cargar las tablas de percentiles
+    tablas = cargar_percentiles_db(db)
+    sexo = paciente.sexo
+    
+    edades_str = tablas.get(sexo, {}).keys()
+    if not edades_str:
+        raise KeyError(f"No se encontraron datos de percentiles para el sexo: {sexo}")
+        
+    edades_percentiles = sorted([int(k) for k in edades_str])
+    
+    p5 = [tablas[sexo][str(e)]["p5"] for e in edades_percentiles]
+    p85 = [tablas[sexo][str(e)]["p85"] for e in edades_percentiles]
+    p95 = [tablas[sexo][str(e)]["p95"] for e in edades_percentiles]
+
+    # 2. Preparar datos del historial del paciente
+    historial_puntos = []
+    for calculo in historial:
+        if calculo.imc is None: # Omitir cálculos incompletos
+            continue
+        # Usamos la edad en meses para mayor precisión en el gráfico
+        edad_meses = _calcular_edad_en_meses(paciente.fecha_nacimiento, calculo.timestamp.date())
+        # Convertimos a "años" fraccionales para el eje X
+        edad_fraccional = edad_meses / 12.0
+        historial_puntos.append((edad_fraccional, calculo.imc))
+    
+    # Ordenar por edad para que la línea se dibuje correctamente
+    historial_puntos.sort(key=lambda x: x[0])
+    
+    historial_edades = [p[0] for p in historial_puntos]
+    historial_imcs = [p[1] for p in historial_puntos]
+
+    # 3. Dibujar el Gráfico
+    plt.figure(figsize=(10, 6))
+    
+    # Líneas de percentiles
+    plt.plot(edades_percentiles, p5, label="Límite mínimo saludable", linestyle="--", color="orange", linewidth=2.5)
+    plt.plot(edades_percentiles, p85, label="Inicio del sobrepeso", linestyle="--", color="orangered", linewidth=2.5)
+    plt.plot(edades_percentiles, p95, label="Límite de obesidad", linestyle="--", color="crimson", linewidth=2.5)
+
+    # ¡LA MAGIA! Línea de historial del paciente
+    if len(historial_puntos) > 0:
+        plt.plot(historial_edades, historial_imcs, 
+                 label=f"Evolución de {paciente.nombre}", 
+                 color="blue", 
+                 linewidth=2, 
+                 marker='o', # Poner un punto en cada cálculo
+                 markersize=8)
+        
+        # Marcar el último punto de forma especial
+        plt.scatter([historial_edades[-1]], [historial_imcs[-1]], 
+                    color="red", s=150, edgecolors="black", 
+                    linewidths=2, zorder=5, label="Último Cálculo")
+
+    plt.title(f"Curva de Crecimiento de {paciente.nombre}", fontsize=16)
+    plt.xlabel("Edad (años)", fontsize=13)
+    plt.ylabel("IMC", fontsize=13)
+    plt.xticks(fontsize=11)
+    plt.yticks(fontsize=11)
+    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.legend(fontsize=11)
+    plt.tight_layout()
+
+    # 4. Guardar Gráfico
+    # Usamos el ID del paciente para el nombre. De esta forma, el gráfico
+    # se sobrescribe y actualiza cada vez, evitando crear basura.
+    graph_id = f"historial_{paciente.id}"
+    graph_filename = f"grafico_{graph_id}.png"
+    
+    os.makedirs("graficos", exist_ok=True)
+    plt.savefig(os.path.join("graficos", graph_filename))
+    plt.close()
+    
+    return graph_id

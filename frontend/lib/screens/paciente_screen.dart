@@ -7,6 +7,7 @@ import '../providers/paciente_provider.dart';
 import '../models/paciente_model.dart';
 import '../providers/chat_provider.dart';
 import 'chat_screen.dart';
+import 'historial_screen.dart'; // <-- AÑADIR ESTA LÍNEA
 
 class PacienteScreen extends StatefulWidget {
   const PacienteScreen({Key? key}) : super(key: key);
@@ -232,20 +233,17 @@ class _PacienteScreenState extends State<PacienteScreen> {
   }
 
   // --- WIDGET DE TARJETA DE PACIENTE MEJORADO ---
-  Widget _buildPacienteCard(BuildContext context, Paciente paciente) {
+Widget _buildPacienteCard(BuildContext context, Paciente paciente) {
     return GestureDetector(
       onTap: () {
+        // --- CÓDIGO NUEVO ---
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (ctx) => ChangeNotifierProvider(
-              create: (_) => ChatProvider(
-                paciente: paciente,
-                authToken: Provider.of<AuthProvider>(context, listen: false).token!,
-              ),
-              child: const ChatScreen(),
-            ),
+            // Ahora navegamos a HistorialScreen, pasándole el paciente
+            builder: (ctx) => HistorialScreen(paciente: paciente),
           ),
         );
+        // --- FIN CÓDIGO NUEVO ---
       },
       child: Card(
         elevation: 4,
@@ -259,7 +257,7 @@ class _PacienteScreenState extends State<PacienteScreen> {
           subtitle: Text(
               'Nacimiento: ${paciente.fechaNacimiento.toLocal().toString().split(' ')[0]}'),
           trailing:
-              const Icon(Icons.arrow_forward_ios, color: Color(0xFF7E57C2)),
+              const Icon(Icons.analytics_outlined, color: Color(0xFF7E57C2)), // <-- Icono cambiado a "historial"
         ),
       ),
     );

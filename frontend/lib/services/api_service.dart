@@ -1,4 +1,5 @@
 // lib/services/api_service.dart
+import 'dart:typed_data'; // <-- AÑADIR ESTE IMPORT
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
@@ -76,6 +77,33 @@ class ApiService {
     } else {
       throw Exception('Failed to create paciente');
     }
+  }
+
+  // --- NUEVO: Endpoints de Historial ---
+  static Future<List<dynamic>> getHistorialCalculos(String token, int pacienteId) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/pacientes/$pacienteId/historial'),
+      headers: _getAuthHeaders(token),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(utf8.decode(res.bodyBytes));
+    }
+    // Manejo de error si no hay historial
+    if (res.statusCode == 404) {
+      return []; // Devuelve lista vacía si no hay historial
+    }
+    throw Exception('Failed to load historial');
+  }
+
+  static Future<Uint8List> getHistorialGraficoBytes(String token, int pacienteId) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/pacientes/$pacienteId/historial/grafico'),
+      headers: _getAuthHeaders(token),
+    );
+    if (res.statusCode == 200) {
+      return res.bodyBytes;
+    }
+    throw Exception('Failed to load graph');
   }
 
   // --- MODIFICADO: Endpoint de Chat ---

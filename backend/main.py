@@ -120,6 +120,67 @@ def read_user_pacientes(
     """Devuelve la lista de pacientes del usuario logueado."""
     return current_user.pacientes
 
+# ... (después del endpoint @app.get("/pacientes/me"))
+
+@app.get("/pacientes/{paciente_id}/historial", response_model=List[schemas.Calculo])
+def get_historial_paciente(
+    paciente_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Obtiene la lista de todos los cálculos completados de un paciente."""
+    # Verificar que el paciente pertenece al usuario logueado
+    paciente = db.query(models.Paciente).filter(
+        models.Paciente.id == paciente_id,
+        models.Paciente.tutor_id == current_user.id
+    ).first()
+    
+    if not paciente:
+        raise HTTPException(status_code=403, detail="Paciente no autorizado")
+
+    # Obtener todos los cálculos completados
+    historial = db.query(models.Calculo).filter(
+        models.Calculo.paciente_id == paciente_id,
+        models.Calculo.imc != None
+    ).order_by(models.Calculo.timestamp.desc()).all()
+    
+    return historial
+
+@app.get("/pacientes/{paciente_id}/historial/grafico")
+async def get_grafico_historial(
+    paciente_id: int, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(get_current_user)
+):
+    """Genera y devuelve el gráfico CON EL HISTORIAL COMPLETO de un paciente."""
+    paciente = db.query(models.Paciente).filter(
+        models.Paciente.id == paciente_id,
+        models.Paciente.tutor_id == current_user.id
+    ).first()
+    
+    if not paciente:
+        raise HTTPException(status_code=403, detail="Paciente no autorizado")
+
+    historial = db.query(models.Calculo).filter(
+        models.Calculo.paciente_id == paciente.id,
+        models.Calculo.imc != None
+    ).order_by(models.Calculo.timestamp).all()
+
+    if not historial:
+        raise HTTPException(status_code=404, detail="No hay historial de cálculos para este paciente")
+
+    try:
+        # Generar el gráfico (usando la nueva función de utils)
+        graph_id = utils.generar_grafico_historial(paciente, historial, db)
+        path = os.path.join("graficos", f"grafico_{graph_id}.png")
+        if os.path.exists(path):
+            return FileResponse(path, media_type="image/png")
+        else:
+            raise HTTPException(status_code=500, detail="Error al generar el gráfico")
+            
+    except Exception as e:
+        return JSONResponse(content={"error": f"Error al generar gráfico: {str(e)}"}, status_code=500)
+
 # --- Endpoints del Chat (Protegidos y Refactorizados) ---
 
 @app.post("/mensaje", response_model=schemas.RespuestaChat)

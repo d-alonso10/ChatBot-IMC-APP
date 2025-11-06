@@ -179,15 +179,27 @@ def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None, pac
             # 3. Calcular todo
             imc = calcular_imc(calculo.peso, calculo.talla)
             clasificacion = clasificar_por_percentil(imc, edad, sexo, tablas_percentiles)
-            graph_id = generar_grafico_percentil(imc, edad, sexo, tablas_percentiles)
 
-            # 4. Guardar resultados en la BD
+            # 4. Guardar resultados en la BD (¡ANTES de generar el gráfico!)
             calculo.imc = round(imc, 2)
             calculo.clasificacion = clasificacion
+            db.commit() # Guardamos el cálculo actual
+
+            # 5. Generar el GRÁFICO DE HISTORIAL
+            # Obtenemos el historial COMPLETO (incluyendo el que acabamos de guardar)
+            historial_completo = db.query(models.Calculo).filter(
+                models.Calculo.paciente_id == paciente.id,
+                models.Calculo.imc != None
+            ).order_by(models.Calculo.timestamp).all()
+            
+            # Llamamos a la nueva función del gráfico
+            graph_id = generar_grafico_historial(paciente, historial_completo, db)
+            
+            # Guardamos el ID del gráfico en el cálculo (aunque ya no es tan crucial)
             calculo.graph_id = graph_id
             db.commit()
 
-            # 5. Generar reporte
+            # 6. Generar reporte
             mensaje_resultado = confirmacion
             mensaje_resultado += "✨ ¡Listo! Procesando datos...\n\n"
             mensaje_resultado += generar_reporte_resumen(imc, edad, calculo.peso, calculo.talla, clasificacion, nombre)

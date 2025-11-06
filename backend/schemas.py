@@ -19,6 +19,21 @@ class Paciente(PacienteBase):
     class Config:
         from_attributes = True # <-- CORREGIDO (antes orm_mode)
 
+class Calculo(BaseModel):
+    id: str
+    peso: Optional[float] = None
+    talla: Optional[float] = None
+    imc: Optional[float] = None
+    clasificacion: Optional[str] = None
+    graph_id: Optional[str] = None
+    timestamp: datetime
+    paciente_id: int
+
+    class Config:
+        from_attributes = True
+
+
+
 # --- Schemas de User (Tutor) ---
 class UserBase(BaseModel):
     email: EmailStr
