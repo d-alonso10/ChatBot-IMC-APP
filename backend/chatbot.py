@@ -7,7 +7,7 @@ import unicodedata
 from typing import Dict, Tuple, Optional, Any
 from sqlalchemy.orm import Session
 import models
-from utils import calcular_imc, generar_grafico_percentil, clasificar_por_percentil, cargar_percentiles_db
+from utils import calcular_imc, generar_grafico_percentil, clasificar_por_percentil, cargar_percentiles_db, generar_grafico_historial
 from datetime import date
 
 # --- Funciones de Utilidad (sin cambios) ---

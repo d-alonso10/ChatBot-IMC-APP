@@ -1,6 +1,6 @@
 # backend/schemas.py
 from pydantic import BaseModel, EmailStr
-from datetime import date
+from datetime import date, datetime  # <--- ¡CORREGIDO! Faltaba datetime
 from typing import Optional, List
 
 # --- Schemas de Paciente ---
@@ -17,8 +17,9 @@ class Paciente(PacienteBase):
     tutor_id: int
 
     class Config:
-        from_attributes = True # <-- CORREGIDO (antes orm_mode)
+        from_attributes = True
 
+# --- NUEVO SCHEMA AÑADIDO ---
 class Calculo(BaseModel):
     id: str
     peso: Optional[float] = None
@@ -26,13 +27,11 @@ class Calculo(BaseModel):
     imc: Optional[float] = None
     clasificacion: Optional[str] = None
     graph_id: Optional[str] = None
-    timestamp: datetime
+    timestamp: datetime # <-- Esta línea ahora es válida
     paciente_id: int
 
     class Config:
         from_attributes = True
-
-
 
 # --- Schemas de User (Tutor) ---
 class UserBase(BaseModel):
@@ -46,7 +45,7 @@ class User(UserBase):
     pacientes: List[Paciente] = []
 
     class Config:
-        from_attributes = True # <-- CORREGIDO (antes orm_mode)
+        from_attributes = True
 
 # --- Schemas de Autenticación (Token) ---
 class Token(BaseModel):
