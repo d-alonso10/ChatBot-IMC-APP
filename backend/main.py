@@ -4,7 +4,7 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload  # <--- ¡AÑADIR joinedload!
 import os
 from typing import Dict, Any, List
 
@@ -12,13 +12,13 @@ from typing import Dict, Any, List
 import models, schemas, auth, utils, chatbot
 from database import SessionLocal, engine
 
-# Crear las tablas en la base de datos (¡asegúrate que la BD esté limpia!)
+# Crear las tablas en la base de datos
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="API IMC Pediátrico",
     description="Servicio de chatbot para calcular IMC infantil y generar recomendaciones",
-    version="2.0.0" # ¡Nueva versión!
+    version="2.0.0"
 )
 
 # --- Configuración de CORS (sin cambios) ---
@@ -41,7 +41,6 @@ def get_db():
     finally:
         db.close()
 
-# Configuración de OAuth2
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> models.User:
@@ -59,7 +58,14 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     if email is None:
         raise credentials_exception
     
-    user = db.query(models.User).filter(models.User.email == email).first()
+    # --- ¡LÍNEA MODIFICADA! ---
+    # Le decimos a SQLAlchemy que cargue la relación "pacientes"
+    # inmediatamente usando un JOIN (joinedload).
+    user = db.query(models.User).options(
+        joinedload(models.User.pacientes)
+    ).filter(models.User.email == email).first()
+    # --- FIN DE LA MODIFICACIÓN ---
+    
     if user is None:
         raise credentials_exception
     return user
@@ -106,7 +112,10 @@ def create_paciente_for_user(
     current_user: models.User = Depends(get_current_user)
 ):
     """Crea un nuevo perfil de paciente para el usuario logueado."""
-    nuevo_paciente = models.Paciente(**paciente.dict(), tutor_id=current_user.id)
+    # --- ¡LÍNEA MODIFICADA! ---
+    # .dict() es de Pydantic v1, .model_dump() es de Pydantic v2
+    nuevo_paciente = models.Paciente(**paciente.model_dump(), tutor_id=current_user.id)
+    # --- FIN DE LA MODIFICACIÓN ---
     db.add(nuevo_paciente)
     db.commit()
     db.refresh(nuevo_paciente)
@@ -118,9 +127,8 @@ def read_user_pacientes(
     current_user: models.User = Depends(get_current_user)
 ):
     """Devuelve la lista de pacientes del usuario logueado."""
+    # Ahora current_user.pacientes ya está cargado y no dará error.
     return current_user.pacientes
-
-# ... (después del endpoint @app.get("/pacientes/me"))
 
 @app.get("/pacientes/{paciente_id}/historial", response_model=List[schemas.Calculo])
 def get_historial_paciente(
@@ -129,7 +137,6 @@ def get_historial_paciente(
     current_user: models.User = Depends(get_current_user)
 ):
     """Obtiene la lista de todos los cálculos completados de un paciente."""
-    # Verificar que el paciente pertenece al usuario logueado
     paciente = db.query(models.Paciente).filter(
         models.Paciente.id == paciente_id,
         models.Paciente.tutor_id == current_user.id
@@ -138,7 +145,6 @@ def get_historial_paciente(
     if not paciente:
         raise HTTPException(status_code=403, detail="Paciente no autorizado")
 
-    # Obtener todos los cálculos completados
     historial = db.query(models.Calculo).filter(
         models.Calculo.paciente_id == paciente_id,
         models.Calculo.imc != None
@@ -170,7 +176,6 @@ async def get_grafico_historial(
         raise HTTPException(status_code=404, detail="No hay historial de cálculos para este paciente")
 
     try:
-        # Generar el gráfico (usando la nueva función de utils)
         graph_id = utils.generar_grafico_historial(paciente, historial, db)
         path = os.path.join("graficos", f"grafico_{graph_id}.png")
         if os.path.exists(path):
@@ -187,12 +192,11 @@ async def get_grafico_historial(
 async def recibir_mensaje(
     msg: schemas.Mensaje, 
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user) # <-- ENDPOINT PROTEGIDO
+    current_user: models.User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
     Procesa un mensaje del usuario para un paciente específico.
     """
-    # Verificar que el paciente pertenece al usuario logueado
     paciente = db.query(models.Paciente).filter(
         models.Paciente.id == msg.paciente_id,
         models.Paciente.tutor_id == current_user.id
@@ -222,7 +226,3 @@ async def obtener_grafico(graph_id: str):
     if os.path.exists(path):
         return FileResponse(path, media_type="image/png")
     return JSONResponse(content={"error": "Gráfico no disponible."}, status_code=404)
-
-# --- Endpoint /bienvenida (Eliminado) ---
-# Ya no es necesario. El frontend iniciará la conversación
-# después de que el usuario seleccione un paciente.
