@@ -1,6 +1,6 @@
 # backend/schemas.py
 from pydantic import BaseModel, EmailStr
-from datetime import date, datetime  # <--- ¡CORREGIDO! Faltaba datetime
+from datetime import date, datetime
 from typing import Optional, List
 
 # --- Schemas de Paciente ---
@@ -17,9 +17,9 @@ class Paciente(PacienteBase):
     tutor_id: int
 
     class Config:
-        from_attributes = True
+        from_attributes = True # <-- ESTA LÍNEA ES CRUCIAL
 
-# --- NUEVO SCHEMA AÑADIDO ---
+# --- Schema de Cálculo ---
 class Calculo(BaseModel):
     id: str
     peso: Optional[float] = None
@@ -27,11 +27,11 @@ class Calculo(BaseModel):
     imc: Optional[float] = None
     clasificacion: Optional[str] = None
     graph_id: Optional[str] = None
-    timestamp: datetime # <-- Esta línea ahora es válida
+    timestamp: datetime
     paciente_id: int
 
     class Config:
-        from_attributes = True
+        from_attributes = True # <-- ESTA LÍNEA ES CRUCIAL
 
 # --- Schemas de User (Tutor) ---
 class UserBase(BaseModel):
@@ -45,7 +45,7 @@ class User(UserBase):
     pacientes: List[Paciente] = []
 
     class Config:
-        from_attributes = True
+        from_attributes = True # <-- ESTA LÍNEA ES CRUCIAL
 
 # --- Schemas de Autenticación (Token) ---
 class Token(BaseModel):
@@ -58,8 +58,8 @@ class TokenData(BaseModel):
 # --- Schemas del Chat (Modificados) ---
 class Mensaje(BaseModel):
     texto: str
-    paciente_id: int  # <-- AHORA ES REQUERIDO
-    conversation_id: str | None = None # Sigue siendo opcional para iniciar
+    paciente_id: int
+    conversation_id: str | None = None
 
 class RespuestaChat(BaseModel):
     respuesta: str
