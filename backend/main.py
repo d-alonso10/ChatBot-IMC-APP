@@ -4,7 +4,7 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session, joinedload  # <--- ¡AÑADIR joinedload!
+from sqlalchemy.orm import Session, joinedload  # <--- ¡IMPORTANTE!
 import os
 from typing import Dict, Any, List
 
@@ -58,13 +58,11 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     if email is None:
         raise credentials_exception
     
-    # --- ¡LÍNEA MODIFICADA! ---
-    # Le decimos a SQLAlchemy que cargue la relación "pacientes"
-    # inmediatamente usando un JOIN (joinedload).
+    # --- ¡SOLUCIÓN DE CARGA ANSIOSA (EAGER LOADING)! ---
     user = db.query(models.User).options(
         joinedload(models.User.pacientes)
     ).filter(models.User.email == email).first()
-    # --- FIN DE LA MODIFICACIÓN ---
+    # --- FIN DE LA SOLUCIÓN ---
     
     if user is None:
         raise credentials_exception
@@ -83,6 +81,12 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+    
+    # Cargar explícitamente los pacientes (lista vacía) para la respuesta
+    db.query(models.User).options(
+        joinedload(models.User.pacientes)
+    ).filter(models.User.id == new_user.id).first()
+
     return new_user
 
 @app.post("/token", response_model=schemas.Token)
@@ -112,10 +116,10 @@ def create_paciente_for_user(
     current_user: models.User = Depends(get_current_user)
 ):
     """Crea un nuevo perfil de paciente para el usuario logueado."""
-    # --- ¡LÍNEA MODIFICADA! ---
-    # .dict() es de Pydantic v1, .model_dump() es de Pydantic v2
-    nuevo_paciente = models.Paciente(**paciente.model_dump(), tutor_id=current_user.id)
-    # --- FIN DE LA MODIFICACIÓN ---
+    # --- ¡CORRECCIÓN Pydantic v1! ---
+    # .model_dump() es v2, .dict() es v1
+    nuevo_paciente = models.Paciente(**paciente.dict(), tutor_id=current_user.id)
+    # --- FIN CORRECCIÓN ---
     db.add(nuevo_paciente)
     db.commit()
     db.refresh(nuevo_paciente)
@@ -123,11 +127,9 @@ def create_paciente_for_user(
 
 @app.get("/pacientes/me", response_model=List[schemas.Paciente])
 def read_user_pacientes(
-    db: Session = Depends(get_db), 
     current_user: models.User = Depends(get_current_user)
 ):
     """Devuelve la lista de pacientes del usuario logueado."""
-    # Ahora current_user.pacientes ya está cargado y no dará error.
     return current_user.pacientes
 
 @app.get("/pacientes/{paciente_id}/historial", response_model=List[schemas.Calculo])

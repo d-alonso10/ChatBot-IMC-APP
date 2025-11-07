@@ -17,7 +17,7 @@ class Paciente(PacienteBase):
     tutor_id: int
 
     class Config:
-        from_attributes = True # <-- ESTA LÍNEA ES CRUCIAL
+        orm_mode = True # <-- CORREGIDO (compatible con Pydantic v1)
 
 # --- Schema de Cálculo ---
 class Calculo(BaseModel):
@@ -31,7 +31,7 @@ class Calculo(BaseModel):
     paciente_id: int
 
     class Config:
-        from_attributes = True # <-- ESTA LÍNEA ES CRUCIAL
+        orm_mode = True # <-- CORREGIDO (compatible con Pydantic v1)
 
 # --- Schemas de User (Tutor) ---
 class UserBase(BaseModel):
@@ -45,7 +45,7 @@ class User(UserBase):
     pacientes: List[Paciente] = []
 
     class Config:
-        from_attributes = True # <-- ESTA LÍNEA ES CRUCIAL
+        orm_mode = True # <-- CORREGIDO (compatible con Pydantic v1)
 
 # --- Schemas de Autenticación (Token) ---
 class Token(BaseModel):
