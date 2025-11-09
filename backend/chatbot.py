@@ -9,17 +9,16 @@ from sqlalchemy.orm import Session
 import models
 from utils import (
     calcular_imc,
-    generar_grafico_percentil,
+    generar_grafico_percentil, # La dejamos por si acaso
     clasificar_por_percentil,
     cargar_percentiles_db,
-    generar_grafico_historial
+    generar_grafico_historial # ¡Esta es la que queremos!
 )
 from datetime import date
 import spacy
 
 # --- INICIO DE CONFIGURACIÓN DE NLU (spaCy) ---
 # (Esta parte está perfecta, no se cambia)
-
 def _setup_nlp():
     """Carga el modelo de spaCy y añade las reglas de entidad."""
     try:
@@ -86,6 +85,7 @@ def generar_reporte_resumen(imc: float, edad: int, peso: float, talla: float, cl
         f"• Categoría: {clasificacion.upper()}\n\n"
         f"{intro} ({peso}kg, {talla_cm}cm):\n\n"
     )
+    # ... (el resto de los consejos no cambia)
     if "bajo peso" in clasificacion:
         consejos = (
             "⭐ Consejos prácticos:\n"
@@ -119,6 +119,7 @@ def generar_reporte_resumen(imc: float, edad: int, peso: float, talla: float, cl
             "💡 Importante: No hagas dietas restrictivas sin supervisión médica."
         )
     return resumen + consejos
+
 
 def _calcular_edad(fecha_nacimiento: date) -> int:
     # ... (sin cambios)
@@ -169,8 +170,6 @@ def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None, pac
     confirmacion_talla = ""
 
     # --- PASO A: "Slot-Filling" con NLU (para frases completas) ---
-    # Intenta llenar cualquier campo vacío si el usuario da unidades (kg, m, cm)
-    
     if calculo.peso is None:
         for ent in doc.ents:
             if ent.label_ == "PESO":
@@ -178,7 +177,7 @@ def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None, pac
                 if peso_encontrado and 0 < peso_encontrado < 200:
                     calculo.peso = peso_encontrado
                     datos_actualizados_nlu = True
-                    break # Encontramos el peso
+                    break
     
     if calculo.talla is None:
         for ent in doc.ents:
@@ -187,7 +186,7 @@ def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None, pac
                 if talla_encontrada and 0 < talla_encontrada <= 2.5:
                     calculo.talla = talla_encontrada
                     datos_actualizados_nlu = True
-                    break # Encontramos la talla
+                    break
             
             if ent.label_ == "TALLA_CM":
                 talla_cm = extraer_numero(ent.text)
@@ -195,26 +194,20 @@ def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None, pac
                     calculo.talla = talla_cm / 100.0
                     confirmacion_talla = f"📏 Detecté {talla_cm} cm. Lo convertí a {calculo.talla} metros. "
                     datos_actualizados_nlu = True
-                    break # Encontramos la talla
+                    break
 
+    mensaje_limpio = mensaje
     if datos_actualizados_nlu:
         db.commit()
+        for ent in doc.ents:
+            if ent.label_ in ["PESO", "TALLA_M", "TALLA_CM"]:
+                mensaje_limpio = mensaje_limpio.replace(ent.text, "")
 
     # --- PASO B: Máquina de Estados (para datos uno por uno, SIN UNIDADES) ---
-    # Si el NLU no llenó AMBOS campos, entra aquí.
-    
-    # Limpiar el mensaje de lo que SÍ encontró el NLU
-    mensaje_limpio = mensaje
-    for ent in doc.ents:
-        if (ent.label_ == "PESO" and calculo.peso is not None) or \
-           (ent.label_ in ["TALLA_M", "TALLA_CM"] and calculo.talla is not None):
-            mensaje_limpio = mensaje_limpio.replace(ent.text, "")
-
     numero_simple = extraer_numero(mensaje_limpio)
     
-    if numero_simple is not None and not (calculo.peso is not None and calculo.talla is not None):
+    if numero_simple is not None:
         if calculo.peso is None:
-            # El NLU no encontró peso, así que usamos el número simple para el PESO
             if 0 < numero_simple < 200:
                 calculo.peso = numero_simple
                 db.commit()
@@ -222,7 +215,6 @@ def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None, pac
                 return "⚠️ Peso fuera de rango razonable (0-200 kg). Verifica el dato.", False, None, conversation_id
         
         elif calculo.talla is None:
-            # El NLU no encontró talla (o ya la tenía), así que usamos el número simple para la TALLA
             talla_raw = numero_simple
             if talla_raw > 2.5 and talla_raw <= 250: # Asumir CM
                 calculo.talla = talla_raw / 100.0
@@ -235,19 +227,16 @@ def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None, pac
                 return "📐 Talla no válida. Debe estar entre 0 y 2.5 metros. Ejemplo: 1.15", False, None, conversation_id
             
     # --- PASO C: Revisión Final y Respuesta ---
-    # Ahora que NLU y la extracción simple han terminado, vemos qué falta.
     
     if calculo.peso is None:
-        # No se encontró peso por NLU ni por extracción simple
         return f"¡Hola! 👋 Estoy listo para calcular el IMC de {paciente.nombre}.\n\n¿Cuál es su PESO actual? (ej: 15.5 kg)", False, None, conversation_id
 
     if calculo.talla is None:
-        # Se encontró el peso, pero no la talla
         return f"Anotado, {calculo.peso} kg. Ahora, ¿cuál es su estatura? (en metros ej: 1.10, o en cm ej: 110)", False, None, conversation_id
     
     # ¡Ambos campos están llenos! Proceder al cálculo.
     try:
-        # --- CÁLCULO FINAL (Sin cambios) ---
+        # --- CÁLCULO FINAL (¡¡¡CORREGIDO!!!) ---
         edad = _calcular_edad(paciente.fecha_nacimiento)
         sexo = paciente.sexo
         nombre = paciente.nombre
@@ -259,26 +248,32 @@ def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None, pac
         imc = calcular_imc(calculo.peso, calculo.talla)
         clasificacion = clasificar_por_percentil(imc, edad, sexo, tablas_percentiles)
 
+        # 1. Guardar los resultados del cálculo en la BD
         calculo.imc = round(imc, 2)
         calculo.clasificacion = clasificacion
-        db.commit() 
+        db.commit() # ¡Guardamos ANTES de generar el gráfico!
 
+        # 2. Obtener el historial COMPLETO (incluyendo el cálculo actual)
         historial_completo = db.query(models.Calculo).filter(
             models.Calculo.paciente_id == paciente.id,
             models.Calculo.imc != None
         ).order_by(models.Calculo.timestamp).all()
         
+        # 3. Llamar a la función de gráfico de HISTORIAL
         graph_id = generar_grafico_historial(paciente, historial_completo, db)
         
+        # 4. Guardar el ID del gráfico (opcional, pero bueno)
         calculo.graph_id = graph_id
         db.commit()
 
+        # 5. Generar el reporte
         mensaje_resultado = confirmacion_talla
         mensaje_resultado += "✨ ¡Listo! Procesando datos...\n\n"
         mensaje_resultado += generar_reporte_resumen(imc, edad, calculo.peso, calculo.talla, clasificacion, nombre)
         mensaje_resultado += "\n\n🔁 ¿Deseas realizar otro cálculo? Escribe 'nuevo'."
 
         return mensaje_resultado, True, graph_id, conversation_id
+        # --- FIN DE LA CORRECCIÓN ---
 
     except Exception as e:
         print(f"Error detallado en chatbot.py: {e}") 
