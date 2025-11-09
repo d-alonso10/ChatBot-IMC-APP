@@ -18,6 +18,7 @@ from datetime import date
 import spacy
 
 # --- INICIO DE CONFIGURACIÓN DE NLU (spaCy) ---
+# (Esta parte está perfecta, no se cambia)
 
 def _setup_nlp():
     """Carga el modelo de spaCy y añade las reglas de entidad."""
@@ -48,12 +49,12 @@ def _setup_nlp():
     return nlp
 
 nlp = _setup_nlp()
-
 # --- FIN DE CONFIGURACIÓN DE NLU ---
 
 
 # --- Funciones de Utilidad (sin cambios) ---
 def normalizar_texto(texto: str) -> str:
+    # ... (sin cambios)
     texto = texto.lower().strip()
     texto = ''.join(
         c for c in unicodedata.normalize('NFD', texto)
@@ -62,6 +63,7 @@ def normalizar_texto(texto: str) -> str:
     return texto
 
 def extraer_numero(texto: str) -> Optional[float]:
+    # ... (sin cambios)
     texto = texto.strip().replace(',', '.')
     match = re.search(r'\d+\.?\d*', texto)
     if match:
@@ -72,7 +74,7 @@ def extraer_numero(texto: str) -> Optional[float]:
     return None
 
 def generar_reporte_resumen(imc: float, edad: int, peso: float, talla: float, clasificacion: str, nombre: Optional[str] = None) -> str:
-    # (Sin cambios)
+    # ... (sin cambios)
     talla_cm = int(talla * 100)
     titulo = f"\n📋 Resultado para {nombre} ({edad} años):\n" if nombre else f"\n📋 Resultado para niño/a de {edad} años:\n"
     intro = f"👶 Para {nombre}" if nombre else f"👶 Para tu pequeño/a de {edad} años"
@@ -119,6 +121,7 @@ def generar_reporte_resumen(imc: float, edad: int, peso: float, talla: float, cl
     return resumen + consejos
 
 def _calcular_edad(fecha_nacimiento: date) -> int:
+    # ... (sin cambios)
     hoy = date.today()
     edad = hoy.year - fecha_nacimiento.year - ((hoy.month, hoy.day) < (fecha_nacimiento.month, fecha_nacimiento.day))
     return edad
@@ -131,7 +134,7 @@ def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None, pac
     if not mensaje:
         return "No recibí nada 😅. Por favor, escribe un dato válido.", False, None, conversation_id or ""
 
-    # 1. Obtener o crear la conversación (objeto Calculo)
+    # 1. Obtener o crear la conversación (sin cambios)
     if not conversation_id:
         calculo = models.Calculo(paciente_id=paciente.id)
         db.add(calculo)
@@ -159,101 +162,90 @@ def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None, pac
     if calculo.talla is not None and calculo.peso is not None:
         return f"📊 Cálculo para {paciente.nombre} ya completado. Escribe 'nuevo' para un nuevo cálculo.", False, None, conversation_id
 
-    # 4. --- LÓGICA NLU Y EXTRACCIÓN MEJORADA ---
+    # 4. --- LÓGICA NLU Y MÁQUINA DE ESTADOS (CORREGIDA) ---
     
-    doc = nlp(mensaje) # Analizar el mensaje con spaCy
+    doc = nlp(mensaje)
     datos_actualizados = False
-    confirmacion = ""
+    confirmacion_talla = ""
 
-    # Etapa 1: Intentar llenar el PESO
+    # --- PASO A: "Slot-Filling" con NLU (para frases completas) ---
+    # Intenta llenar cualquier campo vacío si el usuario da unidades (kg, m, cm)
+    
+    # Solo buscamos si el campo está vacío
     if calculo.peso is None:
-        peso_encontrado = None
-        # Primero, buscar con NLU (ej. "15 kg")
         for ent in doc.ents:
             if ent.label_ == "PESO":
                 peso_encontrado = extraer_numero(ent.text)
-                break
-        
-        # Si NLU no lo encuentra, probar extracción simple (ej. "15")
-        if peso_encontrado is None and not any(ent.label_ in ["TALLA_M", "TALLA_CM"] for ent in doc.ents):
-             # Solo usamos extracción simple si NO se detectaron tallas (para evitar confusiones)
-            peso_encontrado = extraer_numero(mensaje)
-
-        # Validar y guardar el peso si se encontró
-        if peso_encontrado is not None:
-            if 0 < peso_encontrado < 200:
-                calculo.peso = peso_encontrado
-                datos_actualizados = True
-            else:
-                return "⚠️ Peso fuera de rango razonable (0-200 kg). Verifica el dato.", False, None, conversation_id
-        elif not any(ent.label_ in ["TALLA_M", "TALLA_CM"] for ent in doc.ents):
-            # Si estamos en la etapa de peso y no se encontró NADA (ni peso, ni talla)
-            return "🚫 No entendí el peso. Por favor, dime cuánto pesa (ejemplo: 15.5 kg).", False, None, conversation_id
-
-    # Etapa 2: Intentar llenar la TALLA (incluso si el peso se acaba de encontrar)
+                if peso_encontrado and 0 < peso_encontrado < 200:
+                    calculo.peso = peso_encontrado
+                    datos_actualizados = True
+                    break # Encontramos el peso
+    
     if calculo.talla is None:
-        talla_encontrada = None
-        
-        # Primero, buscar con NLU (ej. "1.1 m" o "110 cm")
         for ent in doc.ents:
             if ent.label_ == "TALLA_M":
                 talla_encontrada = extraer_numero(ent.text)
-                if talla_encontrada and (talla_encontrada <= 0 or talla_encontrada > 2.5):
-                    talla_encontrada = None # Invalidar
-                break
-            elif ent.label_ == "TALLA_CM":
+                if talla_encontrada and 0 < talla_encontrada <= 2.5:
+                    calculo.talla = talla_encontrada
+                    datos_actualizados = True
+                    break # Encontramos la talla
+            
+            if ent.label_ == "TALLA_CM":
                 talla_cm = extraer_numero(ent.text)
-                if talla_cm and (0 < talla_cm <= 250):
-                    talla_encontrada = talla_cm / 100.0 # Convertir a metros
-                    confirmacion = f"📏 Detecté {talla_cm} cm. Lo convertí a {talla_encontrada} metros. "
-                break
-        
-        # --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
-        # Si NLU no lo encuentra, probar extracción simple PERO limpiando el peso.
-        if talla_encontrada is None:
-            
-            # 1. Crear un "mensaje limpio" quitando las entidades de peso
-            mensaje_limpio = mensaje
-            for ent in doc.ents:
-                if ent.label_ == "PESO":
-                    mensaje_limpio = mensaje_limpio.replace(ent.text, "")
-            
-            # 2. Buscar el número en el mensaje limpio
-            talla_raw = extraer_numero(mensaje_limpio)
-            
-            if talla_raw is not None:
-                if talla_raw > 2.5: # Asumir que son CM
-                    if talla_raw <= 250:
-                        talla_encontrada = talla_raw / 100.0
-                        confirmacion = f"📏 Detecté {talla_raw} cm. Lo convertí a {talla_encontrada} metros. "
-                elif talla_raw > 0: # Asumir que son M
-                    talla_encontrada = talla_raw
-        
-        # Validar y guardar la talla si se encontró
-        if talla_encontrada is not None:
-            if 0 < talla_encontrada <= 2.5:
-                calculo.talla = talla_encontrada
-                datos_actualizados = True
-            else:
-                return "📐 Talla no válida. Debe estar entre 0 y 2.5 metros. Ejemplo: 1.15", False, None, conversation_id
-    
-    # --- FIN DE LA CORRECCIÓN ---
-    
+                if talla_cm and 0 < talla_cm <= 250:
+                    calculo.talla = talla_cm / 100.0
+                    confirmacion_talla = f"📏 Detecté {talla_cm} cm. Lo convertí a {calculo.talla} metros. "
+                    datos_actualizados = True
+                    break # Encontramos la talla
+
     if datos_actualizados:
         db.commit()
 
-    # 5. --- REVISAR ESTADO Y RESPONDER ---
-    # Después de intentar llenar los campos, vemos qué falta.
-
+    # --- PASO B: Máquina de Estados (para datos uno por uno) ---
+    # Si después del NLU todavía faltan datos, usamos la lógica secuencial.
+    
     if calculo.peso is None:
-        return f"¡Hola! 👋 Estoy listo para calcular el IMC de {paciente.nombre}.\n\n¿Cuál es su PESO actual? (ej: 15.5 kg)", False, None, conversation_id
+        # El NLU no encontró peso, así que intentamos una extracción simple
+        numero = extraer_numero(mensaje)
+        if numero is None:
+            return f"¡Hola! 👋 Estoy listo para calcular el IMC de {paciente.nombre}.\n\n¿Cuál es su PESO actual? (ej: 15.5 kg)", False, None, conversation_id
+        
+        if 0 < numero < 200:
+            calculo.peso = numero
+            db.commit()
+            # ¡IMPORTANTE! No continuamos. Esperamos a la próxima respuesta.
+        else:
+            return "⚠️ Peso fuera de rango razonable (0-200 kg). Verifica el dato.", False, None, conversation_id
 
+    # Si el peso está lleno, pero la talla no
     elif calculo.talla is None:
-        # El NLU/extractor solo encontró el peso, así que pedimos la talla.
-        return f"Anotado, {calculo.peso} kg. Ahora, ¿cuál es su estatura? (en metros ej: 1.10, o en cm ej: 110)", False, None, conversation_id
+        # El NLU no encontró talla, así que intentamos extracción simple
+        numero = extraer_numero(mensaje)
+        if numero is None:
+            return f"Anotado, {calculo.peso} kg. Ahora, ¿cuál es su estatura? (en metros ej: 1.10, o en cm ej: 110)", False, None, conversation_id
 
-    else:
-        # ¡Ambos campos están llenos!
+        # ¡OJO! Si el NLU SÍ encontró el peso en este mismo mensaje,
+        # 'numero' podría ser el mismo peso. Lo evitamos.
+        if numero == calculo.peso and not any(ent.label_ in ["TALLA_M", "TALLA_CM"] for ent in doc.ents):
+             # El usuario solo escribió un número (el peso) y no unidades.
+             # Le volvemos a preguntar por la talla.
+             return f"Anotado, {calculo.peso} kg. Ahora, ¿cuál es su estatura? (en metros ej: 1.10, o en cm ej: 110)", False, None, conversation_id
+
+        talla_raw = numero
+        if talla_raw > 2.5 and talla_raw <= 250: # Asumir CM
+            calculo.talla = talla_raw / 100.0
+            confirmacion_talla = f"📏 Detecté {talla_raw} cm. Lo convertí a {calculo.talla} metros. "
+            db.commit()
+        elif talla_raw > 0 and talla_raw <= 2.5: # Asumir Metros
+            calculo.talla = talla_raw
+            db.commit()
+        else:
+            return "📐 Talla no válida. Debe estar entre 0 y 2.5 metros. Ejemplo: 1.15", False, None, conversation_id
+            
+    # --- PASO C: Revisión Final ---
+    # Si después de todo esto, AMBOS campos están llenos...
+    
+    if calculo.peso is not None and calculo.talla is not None:
         try:
             # --- CÁLCULO FINAL (Sin cambios) ---
             edad = _calcular_edad(paciente.fecha_nacimiento)
@@ -281,7 +273,7 @@ def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None, pac
             calculo.graph_id = graph_id
             db.commit()
 
-            mensaje_resultado = confirmacion
+            mensaje_resultado = confirmacion_talla
             mensaje_resultado += "✨ ¡Listo! Procesando datos...\n\n"
             mensaje_resultado += generar_reporte_resumen(imc, edad, calculo.peso, calculo.talla, clasificacion, nombre)
             mensaje_resultado += "\n\n🔁 ¿Deseas realizar otro cálculo? Escribe 'nuevo'."
@@ -291,3 +283,10 @@ def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None, pac
         except Exception as e:
             print(f"Error detallado en chatbot.py: {e}") 
             return f"❌ Error inesperado al procesar los datos: {str(e)}", False, None, conversation_id
+    
+    # Si el peso se llenó pero la talla no (en el caso de una entrada simple como "15")
+    elif calculo.talla is None:
+        return f"Anotado, {calculo.peso} kg. Ahora, ¿cuál es su estatura? (en metros ej: 1.10, o en cm ej: 110)", False, None, conversation_id
+    
+    # Fallback
+    return "Lo siento, algo salió mal. Escribe 'nuevo' para reintentar.", False, None, conversation_id

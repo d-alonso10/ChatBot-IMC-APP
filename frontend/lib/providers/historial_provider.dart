@@ -36,7 +36,7 @@ class HistorialProvider extends ChangeNotifier {
       // Esperar a que ambas terminen
       final results = await Future.wait([futureCalculos, futureGrafico]);
 
-      _calculos = (results[0] as List<dynamic>).map((data) => Calculo.fromJson(data)).toList();
+      _calculos = (results[0]).map((data) => Calculo.fromJson(data)).toList();
       _graficoBytes = results[1] as Uint8List;
 
       if (_calculos.isEmpty) {

@@ -1,5 +1,4 @@
 // lib/models/calculo_model.dart
-import 'package:flutter/foundation.dart';
 
 class Calculo {
   final String id;

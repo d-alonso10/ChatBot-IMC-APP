@@ -81,11 +81,9 @@ class _PacienteScreenState extends State<PacienteScreen> {
                       },
                       // --- FIN TEMA ---
                     );
-                    if (picked != null) {
-                      fechaNacController.text =
-                          picked.toIso8601String().split('T')[0];
-                    }
-                  },
+                    fechaNacController.text =
+                        picked.toIso8601String().split('T')[0];
+                                    },
                 ),
                 DropdownButtonFormField<String>(
                   hint: const Text('Sexo'),
