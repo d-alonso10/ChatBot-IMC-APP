@@ -165,20 +165,19 @@ def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None, pac
     # 4. --- LÓGICA NLU Y MÁQUINA DE ESTADOS (CORREGIDA) ---
     
     doc = nlp(mensaje)
-    datos_actualizados = False
+    datos_actualizados_nlu = False
     confirmacion_talla = ""
 
     # --- PASO A: "Slot-Filling" con NLU (para frases completas) ---
     # Intenta llenar cualquier campo vacío si el usuario da unidades (kg, m, cm)
     
-    # Solo buscamos si el campo está vacío
     if calculo.peso is None:
         for ent in doc.ents:
             if ent.label_ == "PESO":
                 peso_encontrado = extraer_numero(ent.text)
                 if peso_encontrado and 0 < peso_encontrado < 200:
                     calculo.peso = peso_encontrado
-                    datos_actualizados = True
+                    datos_actualizados_nlu = True
                     break # Encontramos el peso
     
     if calculo.talla is None:
@@ -187,7 +186,7 @@ def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None, pac
                 talla_encontrada = extraer_numero(ent.text)
                 if talla_encontrada and 0 < talla_encontrada <= 2.5:
                     calculo.talla = talla_encontrada
-                    datos_actualizados = True
+                    datos_actualizados_nlu = True
                     break # Encontramos la talla
             
             if ent.label_ == "TALLA_CM":
@@ -195,98 +194,92 @@ def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None, pac
                 if talla_cm and 0 < talla_cm <= 250:
                     calculo.talla = talla_cm / 100.0
                     confirmacion_talla = f"📏 Detecté {talla_cm} cm. Lo convertí a {calculo.talla} metros. "
-                    datos_actualizados = True
+                    datos_actualizados_nlu = True
                     break # Encontramos la talla
 
-    if datos_actualizados:
+    if datos_actualizados_nlu:
         db.commit()
 
-    # --- PASO B: Máquina de Estados (para datos uno por uno) ---
-    # Si después del NLU todavía faltan datos, usamos la lógica secuencial.
+    # --- PASO B: Máquina de Estados (para datos uno por uno, SIN UNIDADES) ---
+    # Si el NLU no llenó AMBOS campos, entra aquí.
+    
+    # Limpiar el mensaje de lo que SÍ encontró el NLU
+    mensaje_limpio = mensaje
+    for ent in doc.ents:
+        if (ent.label_ == "PESO" and calculo.peso is not None) or \
+           (ent.label_ in ["TALLA_M", "TALLA_CM"] and calculo.talla is not None):
+            mensaje_limpio = mensaje_limpio.replace(ent.text, "")
+
+    numero_simple = extraer_numero(mensaje_limpio)
+    
+    if numero_simple is not None and not (calculo.peso is not None and calculo.talla is not None):
+        if calculo.peso is None:
+            # El NLU no encontró peso, así que usamos el número simple para el PESO
+            if 0 < numero_simple < 200:
+                calculo.peso = numero_simple
+                db.commit()
+            else:
+                return "⚠️ Peso fuera de rango razonable (0-200 kg). Verifica el dato.", False, None, conversation_id
+        
+        elif calculo.talla is None:
+            # El NLU no encontró talla (o ya la tenía), así que usamos el número simple para la TALLA
+            talla_raw = numero_simple
+            if talla_raw > 2.5 and talla_raw <= 250: # Asumir CM
+                calculo.talla = talla_raw / 100.0
+                confirmacion_talla = f"📏 Detecté {talla_raw} cm. Lo convertí a {calculo.talla} metros. "
+                db.commit()
+            elif talla_raw > 0 and talla_raw <= 2.5: # Asumir Metros
+                calculo.talla = talla_raw
+                db.commit()
+            else:
+                return "📐 Talla no válida. Debe estar entre 0 y 2.5 metros. Ejemplo: 1.15", False, None, conversation_id
+            
+    # --- PASO C: Revisión Final y Respuesta ---
+    # Ahora que NLU y la extracción simple han terminado, vemos qué falta.
     
     if calculo.peso is None:
-        # El NLU no encontró peso, así que intentamos una extracción simple
-        numero = extraer_numero(mensaje)
-        if numero is None:
-            return f"¡Hola! 👋 Estoy listo para calcular el IMC de {paciente.nombre}.\n\n¿Cuál es su PESO actual? (ej: 15.5 kg)", False, None, conversation_id
-        
-        if 0 < numero < 200:
-            calculo.peso = numero
-            db.commit()
-            # ¡IMPORTANTE! No continuamos. Esperamos a la próxima respuesta.
-        else:
-            return "⚠️ Peso fuera de rango razonable (0-200 kg). Verifica el dato.", False, None, conversation_id
+        # No se encontró peso por NLU ni por extracción simple
+        return f"¡Hola! 👋 Estoy listo para calcular el IMC de {paciente.nombre}.\n\n¿Cuál es su PESO actual? (ej: 15.5 kg)", False, None, conversation_id
 
-    # Si el peso está lleno, pero la talla no
-    elif calculo.talla is None:
-        # El NLU no encontró talla, así que intentamos extracción simple
-        numero = extraer_numero(mensaje)
-        if numero is None:
-            return f"Anotado, {calculo.peso} kg. Ahora, ¿cuál es su estatura? (en metros ej: 1.10, o en cm ej: 110)", False, None, conversation_id
-
-        # ¡OJO! Si el NLU SÍ encontró el peso en este mismo mensaje,
-        # 'numero' podría ser el mismo peso. Lo evitamos.
-        if numero == calculo.peso and not any(ent.label_ in ["TALLA_M", "TALLA_CM"] for ent in doc.ents):
-             # El usuario solo escribió un número (el peso) y no unidades.
-             # Le volvemos a preguntar por la talla.
-             return f"Anotado, {calculo.peso} kg. Ahora, ¿cuál es su estatura? (en metros ej: 1.10, o en cm ej: 110)", False, None, conversation_id
-
-        talla_raw = numero
-        if talla_raw > 2.5 and talla_raw <= 250: # Asumir CM
-            calculo.talla = talla_raw / 100.0
-            confirmacion_talla = f"📏 Detecté {talla_raw} cm. Lo convertí a {calculo.talla} metros. "
-            db.commit()
-        elif talla_raw > 0 and talla_raw <= 2.5: # Asumir Metros
-            calculo.talla = talla_raw
-            db.commit()
-        else:
-            return "📐 Talla no válida. Debe estar entre 0 y 2.5 metros. Ejemplo: 1.15", False, None, conversation_id
-            
-    # --- PASO C: Revisión Final ---
-    # Si después de todo esto, AMBOS campos están llenos...
-    
-    if calculo.peso is not None and calculo.talla is not None:
-        try:
-            # --- CÁLCULO FINAL (Sin cambios) ---
-            edad = _calcular_edad(paciente.fecha_nacimiento)
-            sexo = paciente.sexo
-            nombre = paciente.nombre
-            
-            tablas_percentiles = cargar_percentiles_db(db)
-            if not tablas_percentiles.get(sexo) or not tablas_percentiles.get(sexo).get(str(edad)):
-                return f"📊 Lo siento, no tengo datos de percentiles para {sexo} de {edad} años.", False, None, conversation_id
-
-            imc = calcular_imc(calculo.peso, calculo.talla)
-            clasificacion = clasificar_por_percentil(imc, edad, sexo, tablas_percentiles)
-
-            calculo.imc = round(imc, 2)
-            calculo.clasificacion = clasificacion
-            db.commit() 
-
-            historial_completo = db.query(models.Calculo).filter(
-                models.Calculo.paciente_id == paciente.id,
-                models.Calculo.imc != None
-            ).order_by(models.Calculo.timestamp).all()
-            
-            graph_id = generar_grafico_historial(paciente, historial_completo, db)
-            
-            calculo.graph_id = graph_id
-            db.commit()
-
-            mensaje_resultado = confirmacion_talla
-            mensaje_resultado += "✨ ¡Listo! Procesando datos...\n\n"
-            mensaje_resultado += generar_reporte_resumen(imc, edad, calculo.peso, calculo.talla, clasificacion, nombre)
-            mensaje_resultado += "\n\n🔁 ¿Deseas realizar otro cálculo? Escribe 'nuevo'."
-
-            return mensaje_resultado, True, graph_id, conversation_id
-
-        except Exception as e:
-            print(f"Error detallado en chatbot.py: {e}") 
-            return f"❌ Error inesperado al procesar los datos: {str(e)}", False, None, conversation_id
-    
-    # Si el peso se llenó pero la talla no (en el caso de una entrada simple como "15")
-    elif calculo.talla is None:
+    if calculo.talla is None:
+        # Se encontró el peso, pero no la talla
         return f"Anotado, {calculo.peso} kg. Ahora, ¿cuál es su estatura? (en metros ej: 1.10, o en cm ej: 110)", False, None, conversation_id
     
-    # Fallback
-    return "Lo siento, algo salió mal. Escribe 'nuevo' para reintentar.", False, None, conversation_id
+    # ¡Ambos campos están llenos! Proceder al cálculo.
+    try:
+        # --- CÁLCULO FINAL (Sin cambios) ---
+        edad = _calcular_edad(paciente.fecha_nacimiento)
+        sexo = paciente.sexo
+        nombre = paciente.nombre
+        
+        tablas_percentiles = cargar_percentiles_db(db)
+        if not tablas_percentiles.get(sexo) or not tablas_percentiles.get(sexo).get(str(edad)):
+            return f"📊 Lo siento, no tengo datos de percentiles para {sexo} de {edad} años.", False, None, conversation_id
+
+        imc = calcular_imc(calculo.peso, calculo.talla)
+        clasificacion = clasificar_por_percentil(imc, edad, sexo, tablas_percentiles)
+
+        calculo.imc = round(imc, 2)
+        calculo.clasificacion = clasificacion
+        db.commit() 
+
+        historial_completo = db.query(models.Calculo).filter(
+            models.Calculo.paciente_id == paciente.id,
+            models.Calculo.imc != None
+        ).order_by(models.Calculo.timestamp).all()
+        
+        graph_id = generar_grafico_historial(paciente, historial_completo, db)
+        
+        calculo.graph_id = graph_id
+        db.commit()
+
+        mensaje_resultado = confirmacion_talla
+        mensaje_resultado += "✨ ¡Listo! Procesando datos...\n\n"
+        mensaje_resultado += generar_reporte_resumen(imc, edad, calculo.peso, calculo.talla, clasificacion, nombre)
+        mensaje_resultado += "\n\n🔁 ¿Deseas realizar otro cálculo? Escribe 'nuevo'."
+
+        return mensaje_resultado, True, graph_id, conversation_id
+
+    except Exception as e:
+        print(f"Error detallado en chatbot.py: {e}") 
+        return f"❌ Error inesperado al procesar los datos: {str(e)}", False, None, conversation_id
