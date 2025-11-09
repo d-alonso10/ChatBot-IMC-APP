@@ -9,16 +9,16 @@ from sqlalchemy.orm import Session
 import models
 from utils import (
     calcular_imc,
-    generar_grafico_percentil, # La dejamos por si acaso
+    generar_grafico_percentil, # Mantenemos la importación por si acaso
     clasificar_por_percentil,
     cargar_percentiles_db,
-    generar_grafico_historial # ¡Esta es la que queremos!
+    generar_grafico_historial
 )
 from datetime import date
 import spacy
 
 # --- INICIO DE CONFIGURACIÓN DE NLU (spaCy) ---
-# (Esta parte está perfecta, no se cambia)
+
 def _setup_nlp():
     """Carga el modelo de spaCy y añade las reglas de entidad."""
     try:
@@ -28,11 +28,13 @@ def _setup_nlp():
         print("Ejecuta: python -m spacy download es_core_news_sm")
         nlp = spacy.blank("es")
 
-    if not nlp.has_pipe("entity_ruler"):
+    # Usar nlp.pipe_names para evitar añadir el pipe varias veces en reloads
+    if "entity_ruler" not in nlp.pipe_names:
         ruler = nlp.add_pipe("entity_ruler", before="ner")
         patterns = [
+            # --- Patrones de Nivel 1 (Con Unidades - Alta Confianza) ---
             {
-                "label": "PESO",
+                "label": "PESO_KG",
                 "pattern": [{"LIKE_NUM": True}, {"LOWER": {"IN": ["kg", "kgs", "kilo", "kilos", "kilogramos"]}}]
             },
             {
@@ -42,6 +44,26 @@ def _setup_nlp():
             {
                 "label": "TALLA_CM",
                 "pattern": [{"LIKE_NUM": True}, {"LOWER": {"IN": ["cm", "cms", "centimetro", "centimetros"]}}]
+            },
+            
+            # --- Patrones de Nivel 2 (Con Palabras Clave - Media Confianza) ---
+            # Ej. "pesa 65", "peso de 65"
+            {
+                "label": "PESO_SIMPLE",
+                "pattern": [{"LOWER": {"IN": ["pesa", "peso"]}}, {"LIKE_NUM": True}]
+            },
+            {
+                "label": "PESO_SIMPLE",
+                "pattern": [{"LOWER": "peso"}, {"LOWER": "de"}, {"LIKE_NUM": True}]
+            },
+            # Ej. "mide 173", "talla de 173", "estatura 173"
+            {
+                "label": "TALLA_SIMPLE",
+                "pattern": [{"LOWER": {"IN": ["mide", "talla", "estatura"]}}, {"LIKE_NUM": True}]
+            },
+            {
+                "label": "TALLA_SIMPLE",
+                "pattern": [{"LOWER": {"IN": ["talla", "estatura"]}}, {"LOWER": "de"}, {"LIKE_NUM": True}]
             }
         ]
         ruler.add_patterns(patterns)
@@ -53,7 +75,6 @@ nlp = _setup_nlp()
 
 # --- Funciones de Utilidad (sin cambios) ---
 def normalizar_texto(texto: str) -> str:
-    # ... (sin cambios)
     texto = texto.lower().strip()
     texto = ''.join(
         c for c in unicodedata.normalize('NFD', texto)
@@ -62,7 +83,6 @@ def normalizar_texto(texto: str) -> str:
     return texto
 
 def extraer_numero(texto: str) -> Optional[float]:
-    # ... (sin cambios)
     texto = texto.strip().replace(',', '.')
     match = re.search(r'\d+\.?\d*', texto)
     if match:
@@ -85,7 +105,6 @@ def generar_reporte_resumen(imc: float, edad: int, peso: float, talla: float, cl
         f"• Categoría: {clasificacion.upper()}\n\n"
         f"{intro} ({peso}kg, {talla_cm}cm):\n\n"
     )
-    # ... (el resto de los consejos no cambia)
     if "bajo peso" in clasificacion:
         consejos = (
             "⭐ Consejos prácticos:\n"
@@ -98,7 +117,7 @@ def generar_reporte_resumen(imc: float, edad: int, peso: float, talla: float, cl
         consejos = (
             "✅ ¡Excelente! El peso está en rango saludable. Sigue así:\n"
             "• Mantén una dieta equilibrada con frutas, verduras y proteínas.\n"
-            "• Fomenta actividad física diaria: juegos, deportes, baile.\n"
+         " Fomenta actividad física diaria: juegos, deportes, baile.\n"
             "• Limita azúcares, refrescos y alimentos ultraprocesados.\n\n"
             "💡 Consejo: Los buenos hábitos hoy son salud mañana."
         )
@@ -119,7 +138,6 @@ def generar_reporte_resumen(imc: float, edad: int, peso: float, talla: float, cl
             "💡 Importante: No hagas dietas restrictivas sin supervisión médica."
         )
     return resumen + consejos
-
 
 def _calcular_edad(fecha_nacimiento: date) -> int:
     # ... (sin cambios)
@@ -166,17 +184,17 @@ def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None, pac
     # 4. --- LÓGICA NLU Y MÁQUINA DE ESTADOS (CORREGIDA) ---
     
     doc = nlp(mensaje)
-    datos_actualizados_nlu = False
+    datos_actualizados = False
     confirmacion_talla = ""
-
-    # --- PASO A: "Slot-Filling" con NLU (para frases completas) ---
+    
+    # --- PASO A: "Slot-Filling" con NLU (Prioridad Alta: con unidades) ---
     if calculo.peso is None:
         for ent in doc.ents:
-            if ent.label_ == "PESO":
+            if ent.label_ == "PESO_KG":
                 peso_encontrado = extraer_numero(ent.text)
                 if peso_encontrado and 0 < peso_encontrado < 200:
                     calculo.peso = peso_encontrado
-                    datos_actualizados_nlu = True
+                    datos_actualizados = True
                     break
     
     if calculo.talla is None:
@@ -185,48 +203,70 @@ def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None, pac
                 talla_encontrada = extraer_numero(ent.text)
                 if talla_encontrada and 0 < talla_encontrada <= 2.5:
                     calculo.talla = talla_encontrada
-                    datos_actualizados_nlu = True
+                    datos_actualizados = True
                     break
-            
             if ent.label_ == "TALLA_CM":
                 talla_cm = extraer_numero(ent.text)
                 if talla_cm and 0 < talla_cm <= 250:
                     calculo.talla = talla_cm / 100.0
                     confirmacion_talla = f"📏 Detecté {talla_cm} cm. Lo convertí a {calculo.talla} metros. "
-                    datos_actualizados_nlu = True
+                    datos_actualizados = True
+                    break
+    
+    # --- PASO B: "Slot-Filling" con NLU (Prioridad Media: con palabras clave) ---
+    if calculo.peso is None:
+        for ent in doc.ents:
+            if ent.label_ == "PESO_SIMPLE":
+                peso_encontrado = extraer_numero(ent.text)
+                if peso_encontrado and 0 < peso_encontrado < 200:
+                    calculo.peso = peso_encontrado
+                    datos_actualizados = True
                     break
 
-    mensaje_limpio = mensaje
-    if datos_actualizados_nlu:
-        db.commit()
+    if calculo.talla is None:
         for ent in doc.ents:
-            if ent.label_ in ["PESO", "TALLA_M", "TALLA_CM"]:
-                mensaje_limpio = mensaje_limpio.replace(ent.text, "")
+            if ent.label_ == "TALLA_SIMPLE":
+                talla_raw = extraer_numero(ent.text)
+                if talla_raw:
+                    if talla_raw > 2.5 and talla_raw <= 250: # Asumir CM
+                        calculo.talla = talla_raw / 100.0
+                        confirmacion_talla = f"📏 Detecté {talla_raw} cm. Lo convertí a {calculo.talla} metros. "
+                    elif talla_raw > 0 and talla_raw <= 2.5: # Asumir Metros
+                        calculo.talla = talla_raw
+                    datos_actualizados = True
+                    break
 
-    # --- PASO B: Máquina de Estados (para datos uno por uno, SIN UNIDADES) ---
-    numero_simple = extraer_numero(mensaje_limpio)
+    # --- PASO C: Máquina de Estados (Prioridad Baja: solo números) ---
+    # Solo se activa si el NLU no encontró nada (ninguna entidad de peso o talla)
     
-    if numero_simple is not None:
-        if calculo.peso is None:
-            if 0 < numero_simple < 200:
-                calculo.peso = numero_simple
-                db.commit()
-            else:
-                return "⚠️ Peso fuera de rango razonable (0-200 kg). Verifica el dato.", False, None, conversation_id
-        
-        elif calculo.talla is None:
-            talla_raw = numero_simple
-            if talla_raw > 2.5 and talla_raw <= 250: # Asumir CM
-                calculo.talla = talla_raw / 100.0
-                confirmacion_talla = f"📏 Detecté {talla_raw} cm. Lo convertí a {calculo.talla} metros. "
-                db.commit()
-            elif talla_raw > 0 and talla_raw <= 2.5: # Asumir Metros
-                calculo.talla = talla_raw
-                db.commit()
-            else:
-                return "📐 Talla no válida. Debe estar entre 0 y 2.5 metros. Ejemplo: 1.15", False, None, conversation_id
+    entidades_encontradas = [ent.label_ for ent in doc.ents]
+    nlu_no_encontro_nada = not any(label in ["PESO_KG", "TALLA_M", "TALLA_CM", "PESO_SIMPLE", "TALLA_SIMPLE"] for label in entidades_encontradas)
+    
+    if nlu_no_encontro_nada:
+        numero_simple = extraer_numero(mensaje)
+        if numero_simple is not None:
+            if calculo.peso is None:
+                if 0 < numero_simple < 200:
+                    calculo.peso = numero_simple
+                    datos_actualizados = True
+                else:
+                    return "⚠️ Peso fuera de rango razonable (0-200 kg). Verifica el dato.", False, None, conversation_id
             
-    # --- PASO C: Revisión Final y Respuesta ---
+            elif calculo.talla is None:
+                talla_raw = numero_simple
+                if talla_raw > 2.5 and talla_raw <= 250: # Asumir CM
+                    calculo.talla = talla_raw / 100.0
+                    confirmacion_talla = f"📏 Detecté {talla_raw} cm. Lo convertí a {calculo.talla} metros. "
+                elif talla_raw > 0 and talla_raw <= 2.5: # Asumir Metros
+                    calculo.talla = talla_raw
+                else:
+                    return "📐 Talla no válida. Debe estar entre 0 y 2.5 metros. Ejemplo: 1.15", False, None, conversation_id
+                datos_actualizados = True
+
+    if datos_actualizados:
+        db.commit()
+
+    # --- PASO D: Revisión Final y Respuesta ---
     
     if calculo.peso is None:
         return f"¡Hola! 👋 Estoy listo para calcular el IMC de {paciente.nombre}.\n\n¿Cuál es su PESO actual? (ej: 15.5 kg)", False, None, conversation_id
@@ -236,7 +276,7 @@ def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None, pac
     
     # ¡Ambos campos están llenos! Proceder al cálculo.
     try:
-        # --- CÁLCULO FINAL (¡¡¡CORREGIDO!!!) ---
+        # --- CÁLCULO FINAL (Sin cambios) ---
         edad = _calcular_edad(paciente.fecha_nacimiento)
         sexo = paciente.sexo
         nombre = paciente.nombre
@@ -248,32 +288,26 @@ def procesar_mensaje(db: Session, mensaje: str, conversation_id: str | None, pac
         imc = calcular_imc(calculo.peso, calculo.talla)
         clasificacion = clasificar_por_percentil(imc, edad, sexo, tablas_percentiles)
 
-        # 1. Guardar los resultados del cálculo en la BD
         calculo.imc = round(imc, 2)
         calculo.clasificacion = clasificacion
-        db.commit() # ¡Guardamos ANTES de generar el gráfico!
+        db.commit() 
 
-        # 2. Obtener el historial COMPLETO (incluyendo el cálculo actual)
         historial_completo = db.query(models.Calculo).filter(
             models.Calculo.paciente_id == paciente.id,
             models.Calculo.imc != None
         ).order_by(models.Calculo.timestamp).all()
         
-        # 3. Llamar a la función de gráfico de HISTORIAL
         graph_id = generar_grafico_historial(paciente, historial_completo, db)
         
-        # 4. Guardar el ID del gráfico (opcional, pero bueno)
         calculo.graph_id = graph_id
         db.commit()
 
-        # 5. Generar el reporte
         mensaje_resultado = confirmacion_talla
         mensaje_resultado += "✨ ¡Listo! Procesando datos...\n\n"
         mensaje_resultado += generar_reporte_resumen(imc, edad, calculo.peso, calculo.talla, clasificacion, nombre)
         mensaje_resultado += "\n\n🔁 ¿Deseas realizar otro cálculo? Escribe 'nuevo'."
 
         return mensaje_resultado, True, graph_id, conversation_id
-        # --- FIN DE LA CORRECCIÓN ---
 
     except Exception as e:
         print(f"Error detallado en chatbot.py: {e}") 
