@@ -3,14 +3,15 @@ uvicorn[standard]==0.27.0
 pydantic>=1.8.0,<2.0.0
 matplotlib==3.8.2
 python-multipart==0.0.6
-SQLAlchemy==2.0.25  # Añadir
-psycopg2-binary==2.9.9 # Añadir (para Postgres)
-passlib==1.7.4         # <-- Cambiado (o añadido)
-bcrypt==3.2.2          # <-- AÑADIDO
-python-jose[cryptography]==3.3.0 # <-- AÑADIR ESTA LÍNEA
+SQLAlchemy==2.0.25
+psycopg2-binary==2.9.9
+passlib==1.7.4
+bcrypt==3.2.2
+python-jose[cryptography]==3.3.0
 email-validator==2.2.0
 spacy==3.7.5
 reportlab==4.2.0
-celery==5.4.0
-redis==5.0.7
+celery==5.4.0 # <-- VOLVER A CELERY NORMAL (SIN [sqla])
+redis==5.0.7  # <-- VOLVER A AÑADIR REDIS
 firebase-admin==6.5.0
+gevent==24.2.1

@@ -23,7 +23,7 @@ wheels/
 .installed.cfg
 *.egg
 
-# Gráficos generados
+# GrÃ¡ficos generados
 graficos/
 *.png
 
