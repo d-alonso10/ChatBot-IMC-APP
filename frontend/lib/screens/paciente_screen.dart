@@ -5,10 +5,8 @@ import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import '../providers/auth_provider.dart';
 import '../providers/paciente_provider.dart';
 import '../models/paciente_model.dart';
-import '../providers/chat_provider.dart';
-import 'chat_screen.dart';
-import 'historial_screen.dart';
-import 'package:intl/intl.dart';
+import 'historial_screen.dart'; // <--- Importante
+import 'package:intl/intl.dart';    // <--- Importante
 
 class PacienteScreen extends StatefulWidget {
   const PacienteScreen({Key? key}) : super(key: key);
@@ -164,7 +162,7 @@ class _PacienteScreenState extends State<PacienteScreen> {
         backgroundColor: primaryColor,
         elevation: 8,
         shadowColor: Colors.deepPurple.withOpacity(0.3),
-        iconTheme: const IconThemeData(color: Colors.white), // Para el botón de atrás
+        automaticallyImplyLeading: false, // Quitar botón de "atrás"
         title: Row(
           children: [
             Container(
@@ -192,6 +190,7 @@ class _PacienteScreenState extends State<PacienteScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
+            tooltip: 'Cerrar Sesión',
             onPressed: () {
               Provider.of<AuthProvider>(context, listen: false).logout();
             },
@@ -215,6 +214,7 @@ class _PacienteScreenState extends State<PacienteScreen> {
         backgroundColor: primaryColor,
         foregroundColor: Colors.white,
         elevation: 6,
+        tooltip: 'Añadir Paciente',
         child: const Icon(Icons.add),
         onPressed: () => _mostrarDialogAddPaciente(context),
       ),
@@ -244,7 +244,7 @@ class _PacienteScreenState extends State<PacienteScreen> {
     );
   }
 
-  // --- WIDGET DE TARJETA DE PACIENTE (SIN CAMBIOS) ---
+  // --- WIDGET DE TARJETA DE PACIENTE (MODIFICADO) ---
   Widget _buildPacienteCard(BuildContext context, Paciente paciente) {
     return GestureDetector(
       onTap: () {
@@ -287,35 +287,38 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.people_outline,
-            size: 80,
-            color: Colors.grey[400],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            "No tienes pacientes",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[600],
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.people_outline,
+              size: 80,
+              color: Colors.grey[400],
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            "Toca el botón '+' para añadir tu primer paciente.",
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[500],
+            const SizedBox(height: 16),
+            Text(
+              "No tienes pacientes",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[600],
+              ),
             ),
-            textAlign: TextAlign.center,
-            softWrap: true,
-            overflow: TextOverflow.clip,
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              "Toca el botón '+' para añadir tu primer paciente.",
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[500],
+              ),
+              textAlign: TextAlign.center,
+              softWrap: true,
+              overflow: TextOverflow.clip,
+            ),
+          ],
+        ),
       ),
     );
   }

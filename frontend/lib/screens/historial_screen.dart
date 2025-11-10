@@ -6,7 +6,30 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/historial_provider.dart';
 import 'chat_screen.dart';
-import 'package:intl/intl.dart'; // Necesitaremos esto para formatear fechas
+import 'package:intl/intl.dart';
+
+// --- NUEVO WIDGET DE GRÁFICO REUTILIZABLE ---
+class GraficoHistorial extends StatelessWidget {
+  final Uint8List? bytes;
+  const GraficoHistorial({Key? key, required this.bytes}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    if (bytes == null) {
+      return const Center(
+        child: Text('No se pudo cargar el gráfico.'),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16.0),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(15),
+        child: Image.memory(bytes!),
+      ),
+    );
+  }
+}
+// --- FIN NUEVO WIDGET ---
 
 class HistorialScreen extends StatelessWidget {
   final Paciente paciente;
@@ -16,67 +39,129 @@ class HistorialScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final authToken = Provider.of<AuthProvider>(context, listen: false).token!;
 
-    // Usamos un provider que se crea a sí mismo para esta pantalla
     return ChangeNotifierProvider(
-      create: (_) => HistorialProvider(authToken, paciente.id),
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF8F5FB),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF7E57C2),
-          elevation: 8,
-          iconTheme: const IconThemeData(color: Colors.white),
-          title: Text(
-            'Historial de ${paciente.nombre}',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+      // Pasamos el nombre del paciente al provider para el nombre del PDF
+      create: (_) => HistorialProvider(authToken, paciente.id, paciente.nombre),
+      child: DefaultTabController( // <-- AÑADIDO
+        length: 3, // <-- AÑADIDO: 3 pestañas
+        child: Scaffold(
+          backgroundColor: const Color(0xFFF8F5FB),
+          appBar: AppBar(
+            backgroundColor: const Color(0xFF7E57C2),
+            elevation: 8,
+            iconTheme: const IconThemeData(color: Colors.white),
+            title: Text(
+              'Historial de ${paciente.nombre}',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            // --- AÑADIDO: Pestañas ---
+            bottom: const TabBar(
+              indicatorColor: Colors.white,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white70,
+              tabs: [
+                Tab(icon: Icon(Icons.show_chart), text: 'IMC'),
+                Tab(icon: Icon(Icons.scale), text: 'Peso'),
+                Tab(icon: Icon(Icons.height), text: 'Talla'),
+              ],
+            ),
+            // --- AÑADIDO: Botón de Descarga ---
+            actions: [
+              Consumer<HistorialProvider>(
+                builder: (ctx, historial, _) {
+                  // Solo muestra el botón si hay datos
+                  if (historial.estado == HistorialEstado.exito) {
+                    return IconButton(
+                      icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
+                      tooltip: 'Descargar PDF',
+                      onPressed: () async {
+                        // Lógica de descarga
+                        final scaffoldMessenger = ScaffoldMessenger.of(context);
+                        final msg = await historial.descargarPDF();
+                        scaffoldMessenger.showSnackBar(
+                          SnackBar(content: Text(msg)),
+                        );
+                      },
+                    );
+                  }
+                  return const SizedBox.shrink(); // No mostrar nada
+                },
+              )
+            ],
           ),
-        ),
-        body: Consumer<HistorialProvider>(
-          builder: (ctx, historial, child) {
-            switch (historial.estado) {
-              case HistorialEstado.cargando:
-                return const Center(child: CircularProgressIndicator());
-              
-              case HistorialEstado.error:
-                return Center(
-                  child: Text('Error al cargar el historial: ${historial.error}'),
-                );
-              
-              case HistorialEstado.sinDatos:
-                return _buildEmptyState(context, paciente, authToken);
-              
-              case HistorialEstado.exito:
-                return _buildHistorialBody(context, historial, paciente, authToken);
-              
-              default:
-                return const Center(child: Text('Cargando...'));
-            }
-          },
+          // --- FIN DE CAMBIOS EN APPBAR ---
+          body: Consumer<HistorialProvider>(
+            builder: (ctx, historial, child) {
+              switch (historial.estado) {
+                case HistorialEstado.cargando:
+                  return const Center(child: CircularProgressIndicator());
+                
+                case HistorialEstado.error:
+                  return Center(
+                    child: Text('Error al cargar el historial: ${historial.error}'),
+                  );
+                
+                case HistorialEstado.sinDatos:
+                  return _buildEmptyState(context, paciente, authToken);
+                
+                case HistorialEstado.exito:
+                  // --- CUERPO MODIFICADO CON TABBARVIEW ---
+                  return TabBarView(
+                    children: [
+                      // Pestaña 1: IMC
+                      _buildHistorialBody(
+                        context,
+                        historial,
+                        paciente,
+                        authToken,
+                        GraficoHistorial(bytes: historial.graficoIMCBytes),
+                      ),
+                      // Pestaña 2: Peso
+                      _buildHistorialBody(
+                        context,
+                        historial,
+                        paciente,
+                        authToken,
+                        GraficoHistorial(bytes: historial.graficoPesoBytes),
+                      ),
+                      // Pestaña 3: Talla
+                      _buildHistorialBody(
+                        context,
+                        historial,
+                        paciente,
+                        authToken,
+                        GraficoHistorial(bytes: historial.graficoTallaBytes),
+                      ),
+                    ],
+                  );
+                  // --- FIN CUERPO MODIFICADO ---
+                
+                default:
+                  return const Center(child: Text('Cargando...'));
+              }
+            },
+          ),
         ),
       ),
     );
   }
 
   // Widget para cuando SÍ hay historial
-  Widget _buildHistorialBody(BuildContext context, HistorialProvider historial, Paciente paciente, String authToken) {
+  Widget _buildHistorialBody(
+    BuildContext context, 
+    HistorialProvider historial, 
+    Paciente paciente, 
+    String authToken,
+    Widget graficoWidget // <-- Acepta el gráfico como parámetro
+  ) {
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- 1. El Gráfico ---
-            Text(
-              'Curva de Crecimiento',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            if (historial.graficoBytes != null)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(15),
-                child: Image.memory(historial.graficoBytes!),
-              )
-            else
-              const Center(child: Text('No se pudo cargar el gráfico.')),
+            // --- 1. El Gráfico (Ahora dinámico) ---
+            graficoWidget,
             
             const SizedBox(height: 24),
 
@@ -105,12 +190,14 @@ class HistorialScreen extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             ListView.builder(
-              shrinkWrap: true, // Para que funcione dentro de SingleChildScrollView
-              physics: const NeverScrollableScrollPhysics(), // Desactiva scroll de la lista
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
               itemCount: historial.calculos.length,
               itemBuilder: (ctx, i) {
                 final calculo = historial.calculos[i];
-                final fechaFormateada = DateFormat('dd/MM/yyyy').format(calculo.timestamp);
+                // Formateador de fecha
+                final fechaFormateada = DateFormat('dd/MM/yyyy, hh:mm a').format(calculo.timestamp.toLocal());
+                
                 return Card(
                   elevation: 2,
                   margin: const EdgeInsets.symmetric(vertical: 6),
@@ -143,7 +230,7 @@ class HistorialScreen extends StatelessWidget {
     );
   }
 
-  // Widget para cuando NO hay historial
+  // Widget para cuando NO hay historial (sin cambios)
   Widget _buildEmptyState(BuildContext context, Paciente paciente, String authToken) {
     return Center(
       child: Padding(
@@ -184,7 +271,7 @@ class HistorialScreen extends StatelessWidget {
     );
   }
 
-  // Función para navegar al chat
+  // Función para navegar al chat (sin cambios)
   void _iniciarNuevoCalculo(BuildContext context, Paciente paciente, String authToken) {
     Navigator.of(context).push(
       MaterialPageRoute(

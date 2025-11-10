@@ -1,3 +1,4 @@
+// lib/services/api_service.dart
 import 'dart:convert';
 import 'dart:typed_data'; // Asegúrate que este import esté
 import 'package:http/http.dart' as http;
@@ -75,7 +76,7 @@ class ApiService {
     }
   }
 
-  // --- Endpoints de Historial (sin cambios) ---
+  // --- Endpoints de Historial (MODIFICADOS Y NUEVOS) ---
   static Future<List<dynamic>> getHistorialCalculos(
       String token, int pacienteId) async {
     final res = await http.get(
@@ -91,6 +92,7 @@ class ApiService {
     throw Exception('Failed to load historial');
   }
 
+  // --- GRÁFICO DE IMC ---
   static Future<Uint8List> getHistorialGraficoBytes(
       String token, int pacienteId) async {
     final res = await http.get(
@@ -104,6 +106,54 @@ class ApiService {
       throw Exception('404: No hay historial de cálculos');
     }
     throw Exception('Failed to load graph');
+  }
+
+  // --- ¡NUEVO! GRÁFICO DE PESO ---
+  static Future<Uint8List> getGraficoPesoBytes(String token, int pacienteId) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/pacientes/$pacienteId/grafico/peso'),
+      headers: _getAuthHeaders(token),
+    );
+    if (res.statusCode == 200) {
+      return res.bodyBytes;
+    }
+    throw Exception('Failed to load peso graph');
+  }
+
+  // --- ¡NUEVO! GRÁFICO DE TALLA ---
+  static Future<Uint8List> getGraficoTallaBytes(String token, int pacienteId) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/pacientes/$pacienteId/grafico/talla'),
+      headers: _getAuthHeaders(token),
+    );
+    if (res.statusCode == 200) {
+      return res.bodyBytes;
+    }
+    throw Exception('Failed to load talla graph');
+  }
+
+  // --- ¡NUEVO! OBTENER URL DEL PDF (PARA WEB) ---
+  static String getPdfUrl(String token, int pacienteId) {
+    // No podemos pasar el token en la URL, así que este enfoque es simple
+    // pero menos seguro. Para un proyecto real, la descarga en web
+    // requeriría una lógica de token temporal.
+    // POR AHORA, para web, abriremos la URL y el backend (que comparte la sesión)
+    // debería manejarlo.
+    // *** CORRECCIÓN: La autenticación web por URL es mala idea. ***
+    // Llamaremos a getPdfBytes y usaremos un "blob" para descargarlo.
+    return '$baseUrl/pacientes/$pacienteId/exportar-pdf';
+  }
+
+  // --- ¡NUEVO! OBTENER BYTES DEL PDF (PARA MÓVIL Y WEB) ---
+  static Future<Uint8List> getPdfBytes(String token, int pacienteId) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/pacientes/$pacienteId/exportar-pdf'),
+      headers: _getAuthHeaders(token),
+    );
+    if (res.statusCode == 200) {
+      return res.bodyBytes;
+    }
+    throw Exception('Failed to download PDF');
   }
 
   // --- Endpoint de Chat (sin cambios) ---
@@ -125,10 +175,8 @@ class ApiService {
     }
   }
 
-  // --- Endpoint de Gráfico (¡¡MODIFICADO!!) ---
+  // --- Endpoint de Gráfico (sin cambios) ---
   static String getGraficoUrl(String graphId) {
-    // Añadimos un parámetro 'v' con la fecha actual para "romper" la caché del navegador.
-    // Esto fuerza a Flutter Web a descargar la imagen de nuevo cada vez.
     final cacheBuster = DateTime.now().millisecondsSinceEpoch;
     return '$baseUrl/grafico/$graphId?v=$cacheBuster';
   }
