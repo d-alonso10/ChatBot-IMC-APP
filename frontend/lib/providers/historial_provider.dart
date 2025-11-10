@@ -86,15 +86,19 @@ class HistorialProvider extends ChangeNotifier {
     try {
       final bytes = await ApiService.getPdfBytes(_authToken, _pacienteId);
       final pdfData = Uint8List.fromList(bytes);
-      final filename = "Reporte_${_pacienteNombre.replaceAll(' ', '_')}.pdf";
+      
+      // --- CORRECCIÓN ---
+      // 'filename' para la web (con extensión)
+      // 'fileNameWithoutExt' para móvil (sin extensión)
+      final String fileNameWithoutExt = "Reporte_${_pacienteNombre.replaceAll(' ', '_')}";
+      final String filename = "$fileNameWithoutExt.pdf";
 
       if (kIsWeb) {
         // --- LÓGICA PARA WEB ---
-        // Usamos FileSaver para simular una descarga
+        // 'saveFile' usa 'name' para el nombre completo.
         await FileSaver.instance.saveFile(
           name: filename,
           bytes: pdfData,
-          ext: 'pdf',
           mimeType: MimeType.pdf,
         );
       } else {
@@ -107,10 +111,11 @@ class HistorialProvider extends ChangeNotifier {
           final path = '${dir.path}/$filename';
           
           // 3. Guardar el archivo
+          // 'saveAs' usa 'name' (sin extensión) y 'fileExtension' (separado)
           await FileSaver.instance.saveAs(
-            name: filename,
+            name: fileNameWithoutExt, // <--- CORREGIDO
             bytes: pdfData,
-            ext: 'pdf',
+            fileExtension: 'pdf',    // <--- AÑADIDO (este era el error)
             mimeType: MimeType.pdf
           );
           

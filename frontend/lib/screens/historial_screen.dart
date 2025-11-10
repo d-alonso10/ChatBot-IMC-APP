@@ -1,4 +1,5 @@
 // lib/screens/historial_screen.dart
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/paciente_model.dart';
