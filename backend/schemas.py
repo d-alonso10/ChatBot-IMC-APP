@@ -3,7 +3,7 @@ from pydantic import BaseModel, EmailStr
 from datetime import date, datetime
 from typing import Optional, List
 
-# --- Schemas de Paciente ---
+# --- Schemas de Paciente (sin cambios) ---
 class PacienteBase(BaseModel):
     nombre: str
     fecha_nacimiento: date
@@ -17,9 +17,9 @@ class Paciente(PacienteBase):
     tutor_id: int
 
     class Config:
-        orm_mode = True # <-- CORREGIDO (compatible con Pydantic v1)
+        orm_mode = True
 
-# --- Schema de Cálculo ---
+# --- Schema de Cálculo (sin cambios) ---
 class Calculo(BaseModel):
     id: str
     peso: Optional[float] = None
@@ -31,9 +31,24 @@ class Calculo(BaseModel):
     paciente_id: int
 
     class Config:
-        orm_mode = True # <-- CORREGIDO (compatible con Pydantic v1)
+        orm_mode = True
 
-# --- Schemas de User (Tutor) ---
+# --- ¡NUEVOS SCHEMAS PARA FCM! ---
+class UserDeviceBase(BaseModel):
+    fcm_token: str
+
+class UserDeviceCreate(UserDeviceBase):
+    pass
+
+class UserDevice(UserDeviceBase):
+    id: int
+    user_id: int
+    updated_at: datetime
+
+    class Config:
+        orm_mode = True
+
+# --- Schemas de User (MODIFICADO) ---
 class UserBase(BaseModel):
     email: EmailStr
 
@@ -43,11 +58,12 @@ class UserCreate(UserBase):
 class User(UserBase):
     id: int
     pacientes: List[Paciente] = []
+    devices: List[UserDevice] = [] # <-- AÑADIDO
 
     class Config:
-        orm_mode = True # <-- CORREGIDO (compatible con Pydantic v1)
+        orm_mode = True
 
-# --- Schemas de Autenticación (Token) ---
+# --- Schemas de Autenticación (sin cambios) ---
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -55,7 +71,7 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: Optional[str] = None
 
-# --- Schemas del Chat (Modificados) ---
+# --- Schemas del Chat (sin cambios) ---
 class Mensaje(BaseModel):
     texto: str
     paciente_id: int

@@ -1,5 +1,5 @@
 # backend/models.py
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Date
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Date, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 import uuid
 from datetime import datetime
@@ -9,7 +9,7 @@ from auth import hashear_password # Importamos la función de hashing
 def generate_uuid():
     return str(uuid.uuid4())
 
-# --- NUEVO MODELO ---
+# --- MODELO USER (MODIFICADO) ---
 class User(Base):
     __tablename__ = "users"
     
@@ -19,12 +19,39 @@ class User(Base):
     
     # Relación: Un usuario (tutor) puede tener muchos pacientes
     pacientes = relationship("Paciente", back_populates="tutor")
+    
+    # --- NUEVA RELACIÓN ---
+    # Un usuario puede tener múltiples dispositivos (teléfono, tablet, etc.)
+    devices = relationship("UserDevice", back_populates="user")
 
     def __init__(self, email, password):
         self.email = email
         self.hashed_password = hashear_password(password) # Hashea la contraseña al crear
 
-# --- NUEVO MODELO ---
+# --- ¡NUEVO MODELO PARA FCM! ---
+class UserDevice(Base):
+    """
+    Almacena los tokens de Firebase Cloud Messaging (FCM) 
+    para cada dispositivo de un usuario.
+    """
+    __tablename__ = "user_devices"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    # El token de registro de FCM. Puede ser muy largo.
+    fcm_token = Column(Text, nullable=False, unique=True) 
+    
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relación
+    user = relationship("User", back_populates="devices")
+    
+    # Evitar que el mismo token se registre dos veces (aunque 'unique=True' ya ayuda)
+    __table_args__ = (UniqueConstraint('user_id', 'fcm_token', name='_user_device_uc'),)
+
+
+# --- MODELO PACIENTE (Sin cambios) ---
 class Paciente(Base):
     __tablename__ = "pacientes"
     
@@ -32,43 +59,27 @@ class Paciente(Base):
     nombre = Column(String, nullable=False)
     fecha_nacimiento = Column(Date, nullable=False)
     sexo = Column(String, nullable=False) # 'niño' o 'niña'
-    
-    # Clave foránea para vincular al usuario/tutor
     tutor_id = Column(Integer, ForeignKey("users.id"))
     
-    # Relaciones
     tutor = relationship("User", back_populates="pacientes")
-    calculos = relationship("Calculo", back_populates="paciente")
+    calculos = relationship("Calculo", back_populates="calculos")
 
-# --- MODELO MODIFICADO ---
+# --- MODELO CALCULO (Sin cambios) ---
 class Calculo(Base):
     __tablename__ = "calculos"
 
-    # ID de conversación único, sigue siendo útil
     id = Column(String, primary_key=True, default=generate_uuid)
-    
-    # --- Campos eliminados ---
-    # nombre = Column(String, nullable=True)  <- ELIMINADO
-    # edad = Column(Integer, nullable=True)   <- ELIMINADO
-    # sexo = Column(String, nullable=True)    <- ELIMINADO
-    
-    # --- Campos mantenidos/nuevos ---
     peso = Column(Float, nullable=True)
     talla = Column(Float, nullable=True)
-    
-    # Resultados
     imc = Column(Float, nullable=True)
     clasificacion = Column(String, nullable=True)
     graph_id = Column(String, nullable=True) 
     timestamp = Column(DateTime, default=datetime.utcnow)
-    
-    # Clave foránea para vincular al paciente
     paciente_id = Column(Integer, ForeignKey("pacientes.id"))
     
-    # Relación
     paciente = relationship("Paciente", back_populates="calculos")
 
-
+# --- MODELO PERCENTIL (Sin cambios) ---
 class Percentil(Base):
     __tablename__ = "percentiles"
 

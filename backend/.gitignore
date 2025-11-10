@@ -40,3 +40,6 @@ graficos/
 # OS
 .DS_Store
 Thumbs.db
+
+# Celery
+celerybeat-schedule
