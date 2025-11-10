@@ -10,3 +10,4 @@ bcrypt==3.2.2          # <-- AÑADIDO
 python-jose[cryptography]==3.3.0 # <-- AÑADIR ESTA LÍNEA
 email-validator==2.2.0
 spacy==3.7.5
+reportlab==4.2.0

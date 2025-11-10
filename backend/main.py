@@ -2,11 +2,12 @@
 
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload  # <--- ¡IMPORTANTE!
 import os
 from typing import Dict, Any, List
+from datetime import date
 
 # Importaciones locales
 import models, schemas, auth, utils, chatbot
@@ -187,6 +188,124 @@ async def get_grafico_historial(
             
     except Exception as e:
         return JSONResponse(content={"error": f"Error al generar gráfico: {str(e)}"}, status_code=500)
+
+# --- NUEVOS ENDPOINTS PARA HEALTH HUB ---
+
+@app.get("/pacientes/{paciente_id}/grafico/peso")
+async def get_grafico_peso(
+    paciente_id: int, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Genera y devuelve el gráfico de HISTORIAL DE PESO de un paciente.
+    """
+    paciente = db.query(models.Paciente).filter(
+        models.Paciente.id == paciente_id,
+        models.Paciente.tutor_id == current_user.id
+    ).first()
+    
+    if not paciente:
+        raise HTTPException(status_code=403, detail="Paciente no autorizado")
+
+    historial = db.query(models.Calculo).filter(
+        models.Calculo.paciente_id == paciente.id,
+        models.Calculo.peso != None
+    ).order_by(models.Calculo.timestamp).all()
+
+    if not historial:
+        raise HTTPException(status_code=404, detail="No hay historial de cálculos para este paciente")
+
+    try:
+        graph_id = utils.generar_grafico_simple(historial, paciente, "peso")
+        path = os.path.join("graficos", f"grafico_{graph_id}.png")
+        if os.path.exists(path):
+            return FileResponse(path, media_type="image/png")
+        else:
+            raise HTTPException(status_code=500, detail="Error al generar el gráfico")
+            
+    except Exception as e:
+        return JSONResponse(content={"error": f"Error al generar gráfico: {str(e)}"}, status_code=500)
+
+
+@app.get("/pacientes/{paciente_id}/grafico/talla")
+async def get_grafico_talla(
+    paciente_id: int, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Genera y devuelve el gráfico de HISTORIAL DE TALLA de un paciente.
+    """
+    paciente = db.query(models.Paciente).filter(
+        models.Paciente.id == paciente_id,
+        models.Paciente.tutor_id == current_user.id
+    ).first()
+    
+    if not paciente:
+        raise HTTPException(status_code=403, detail="Paciente no autorizado")
+
+    historial = db.query(models.Calculo).filter(
+        models.Calculo.paciente_id == paciente.id,
+        models.Calculo.talla != None
+    ).order_by(models.Calculo.timestamp).all()
+
+    if not historial:
+        raise HTTPException(status_code=404, detail="No hay historial de cálculos para este paciente")
+
+    try:
+        graph_id = utils.generar_grafico_simple(historial, paciente, "talla")
+        path = os.path.join("graficos", f"grafico_{graph_id}.png")
+        if os.path.exists(path):
+            return FileResponse(path, media_type="image/png")
+        else:
+            raise HTTPException(status_code=500, detail="Error al generar el gráfico")
+            
+    except Exception as e:
+        return JSONResponse(content={"error": f"Error al generar gráfico: {str(e)}"}, status_code=500)
+
+
+@app.get("/pacientes/{paciente_id}/exportar-pdf")
+async def exportar_pdf_paciente(
+    paciente_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Genera y devuelve un reporte PDF completo del historial del paciente.
+    """
+    paciente = db.query(models.Paciente).options(
+        joinedload(models.Paciente.tutor) # Cargar el tutor para el reporte
+    ).filter(
+        models.Paciente.id == paciente_id,
+        models.Paciente.tutor_id == current_user.id
+    ).first()
+    
+    if not paciente:
+        raise HTTPException(status_code=403, detail="Paciente no autorizado")
+
+    historial = db.query(models.Calculo).filter(
+        models.Calculo.paciente_id == paciente_id,
+        models.Calculo.imc != None
+    ).order_by(models.Calculo.timestamp.desc()).all()
+    
+    if not historial:
+        raise HTTPException(status_code=404, detail="No hay historial para exportar")
+
+    try:
+        # Generar el PDF en memoria
+        pdf_buffer = utils.generar_reporte_pdf(paciente, historial, db)
+        
+        filename = f"Reporte_{paciente.nombre.replace(' ', '_')}_{date.today()}.pdf"
+        
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        print(f"Error generando PDF: {e}")
+        raise HTTPException(status_code=500, detail=f"Error al generar el PDF: {e}")
 
 # --- Endpoints del Chat (Protegidos y Refactorizados) ---
 
