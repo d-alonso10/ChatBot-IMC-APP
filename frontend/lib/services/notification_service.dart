@@ -49,10 +49,13 @@ class NotificationService {
     try {
       
       // --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
-      // Eliminamos el parámetro 'vapidKey'.
-      // Firebase Messaging lo tomará automáticamente del 
-      // archivo 'firebase_options.dart' cuando se ejecute en web.
-      final fcmToken = await _firebaseMessaging.getToken();
+      // La VAPID key SÍ es necesaria para Web y debe pasarse manualmente.
+      // No se obtiene de firebase_options.dart.
+      final fcmToken = await _firebaseMessaging.getToken(
+        vapidKey: kIsWeb 
+            ? "PEGA_TU_CLAVE_PÚBLICA_VAPID_AQUÍ" 
+            : null,
+      );
       // --- FIN DE LA CORRECCIÓN ---
 
       if (fcmToken == null) {
