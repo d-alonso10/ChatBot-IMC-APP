@@ -5,8 +5,8 @@ import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import '../providers/auth_provider.dart';
 import '../providers/paciente_provider.dart';
 import '../models/paciente_model.dart';
-import 'historial_screen.dart'; // <--- Importante
-import 'package:intl/intl.dart';    // <--- Importante
+import 'historial_screen.dart'; 
+import 'package:intl/intl.dart';    
 
 class PacienteScreen extends StatefulWidget {
   const PacienteScreen({Key? key}) : super(key: key);
@@ -31,6 +31,7 @@ class _PacienteScreenState extends State<PacienteScreen> {
   }
 
   void _mostrarDialogAddPaciente(BuildContext context) {
+    // ... (código del diálogo sin cambios) ...
     final nombreController = TextEditingController();
     final fechaNacController = TextEditingController();
     String? sexoValue; // 'niño' o 'niña'
@@ -155,14 +156,14 @@ class _PacienteScreenState extends State<PacienteScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // --- COLOR DE FONDO AÑADIDO ---
       backgroundColor: backgroundColor,
       appBar: AppBar(
-        // --- ESTILO DE APPBAR MEJORADO (COMO CHATSCREEN) ---
         backgroundColor: primaryColor,
         elevation: 8,
         shadowColor: Colors.deepPurple.withOpacity(0.3),
-        automaticallyImplyLeading: false, // Quitar botón de "atrás"
+        automaticallyImplyLeading: false, 
+        
+        // --- ¡AQUÍ ESTÁ LA CORRECCIÓN PARA EL OVERFLOW! ---
         title: Row(
           children: [
             Container(
@@ -175,18 +176,23 @@ class _PacienteScreenState extends State<PacienteScreen> {
                   const Icon(Icons.family_restroom, color: Colors.white, size: 22),
             ),
             const SizedBox(width: 12),
-            const Text(
-              "Mis Pacientes",
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
-                color: Colors.white,
+            // Envolvemos el texto en Expanded para que tome el espacio restante
+            const Expanded(
+              child: Text(
+                "Mis Pacientes",
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                  color: Colors.white,
+                ),
+                overflow: TextOverflow.ellipsis, // Añadido por seguridad
+                softWrap: false,
               ),
             ),
           ],
         ),
-        // --- FIN ESTILO APPBAR ---
+        // --- FIN DE LA CORRECCIÓN ---
         actions: [
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
@@ -205,12 +211,11 @@ class _PacienteScreenState extends State<PacienteScreen> {
                 : Consumer<PacienteProvider>(
                     builder: (ctx, pacienteData, child) =>
                         pacienteData.pacientes.isEmpty
-                            ? const _EmptyState() // <-- WIDGET MEJORADO
+                            ? const _EmptyState() 
                             : _buildAnimatedList(pacienteData.pacientes),
                   ),
       ),
       floatingActionButton: FloatingActionButton(
-        // --- ESTILO FAB MEJORADO ---
         backgroundColor: primaryColor,
         foregroundColor: Colors.white,
         elevation: 6,
@@ -221,7 +226,7 @@ class _PacienteScreenState extends State<PacienteScreen> {
     );
   }
 
-  // --- WIDGET DE LISTA ANIMADA ---
+  // ... (Widget _buildAnimatedList sin cambios) ...
   Widget _buildAnimatedList(List<Paciente> pacientes) {
     return AnimationLimiter(
       child: ListView.builder(
@@ -244,7 +249,7 @@ class _PacienteScreenState extends State<PacienteScreen> {
     );
   }
 
-  // --- WIDGET DE TARJETA DE PACIENTE (MODIFICADO) ---
+  // ... (Widget _buildPacienteCard sin cambios) ...
   Widget _buildPacienteCard(BuildContext context, Paciente paciente) {
     return GestureDetector(
       onTap: () {
@@ -280,7 +285,7 @@ class _PacienteScreenState extends State<PacienteScreen> {
   }
 }
 
-// --- WIDGET HELPER PARA ESTADO VACÍO ---
+// ... (Widget _EmptyState sin cambios) ...
 class _EmptyState extends StatelessWidget {
   const _EmptyState();
 
