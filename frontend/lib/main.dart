@@ -5,8 +5,8 @@ import 'package:provider/provider.dart';
 // --- AÑADIDOS PARA FIREBASE ---
 import 'package:firebase_core/firebase_core.dart';
 import 'services/notification_service.dart';
-// Importa el archivo que generará 'flutterfire_cli'
-// import 'firebase_options.dart'; 
+// ¡¡IMPORTANTE: DESCOMENTAR ESTA LÍNEA!!
+import 'firebase_options.dart'; 
 // --- FIN DE AÑADIDOS ---
 
 import 'providers/auth_provider.dart';
@@ -21,15 +21,14 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Inicializar Firebase
-  // ¡¡IMPORTANTE!! Esto fallará hasta que ejecutes `flutterfire configure`
-  // y se cree el archivo 'firebase_options.dart'.
   try {
-    // await Firebase.initializeApp(
-    //   options: DefaultFirebaseOptions.currentPlatform,
-    // );
-    // --- NOTA: Comentado temporalmente para evitar un crash
-    // --- hasta que configures tu proyecto en Firebase.
-    // --- Descoméntalo cuando `firebase_options.dart` exista.
+    // --- ¡¡DESCOMENTADO!! ---
+    // Esta línea es esencial.
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    print("Firebase inicializado correctamente.");
+    // --- FIN DE LA MODIFICACIÓN ---
 
   } catch (e) {
     print("Error al inicializar Firebase: $e");
