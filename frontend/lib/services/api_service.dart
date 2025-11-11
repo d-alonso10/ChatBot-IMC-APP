@@ -1,10 +1,9 @@
 // lib/services/api_service.dart
 import 'dart:convert';
-import 'dart:typed_data'; // Asegúrate que este import esté
+import 'dart:typed_data'; 
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  // ¡RECUERDA CAMBIAR ESTO SI PRUEBAS EN MÓVIL!
   static const baseUrl = 'http://127.0.0.1:8000';
 
   static Map<String, String> _getAuthHeaders(String token) {
@@ -16,6 +15,7 @@ class ApiService {
 
   // --- Endpoints de Auth (sin cambios) ---
   static Future<String> login(String email, String password) async {
+    // ... (código existente sin cambios) ...
     final res = await http.post(
       Uri.parse('$baseUrl/token'),
       headers: {'Content-Type': 'application/x-www-form-urlencoded'},
@@ -30,6 +30,7 @@ class ApiService {
   }
 
   static Future<void> register(String email, String password) async {
+    // ... (código existente sin cambios) ...
     final res = await http.post(
       Uri.parse('$baseUrl/users/register'),
       headers: {'Content-Type': 'application/json'},
@@ -45,8 +46,24 @@ class ApiService {
     }
   }
 
+  // --- ¡NUEVO ENDPOINT PARA REGISTRAR DISPOSITIVO! ---
+  static Future<void> registerDevice(String token, String fcmToken) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/users/me/register-device'),
+      headers: _getAuthHeaders(token),
+      body: jsonEncode({
+        'fcm_token': fcmToken,
+      }),
+    );
+    if (res.statusCode != 200) {
+      throw Exception('Failed to register FCM token with backend');
+    }
+  }
+  // --- FIN DE LA MODIFICACIÓN ---
+
   // --- Endpoints de Paciente (sin cambios) ---
   static Future<List<dynamic>> getPacientes(String token) async {
+    // ... (código existente sin cambios) ...
     final res = await http.get(
       Uri.parse('$baseUrl/pacientes/me'),
       headers: _getAuthHeaders(token),
@@ -60,6 +77,7 @@ class ApiService {
 
   static Future<Map<String, dynamic>> createPaciente(
       String token, String nombre, String fechaNacimiento, String sexo) async {
+    // ... (código existente sin cambios) ...
     final res = await http.post(
       Uri.parse('$baseUrl/pacientes/crear'),
       headers: _getAuthHeaders(token),
@@ -76,7 +94,8 @@ class ApiService {
     }
   }
 
-  // --- Endpoints de Historial (MODIFICADOS Y NUEVOS) ---
+  // ... (Resto de Endpoints: Historial, Gráficos, PDF, Chat...) ...
+  // ... (código existente sin cambios) ...
   static Future<List<dynamic>> getHistorialCalculos(
       String token, int pacienteId) async {
     final res = await http.get(
@@ -92,7 +111,6 @@ class ApiService {
     throw Exception('Failed to load historial');
   }
 
-  // --- GRÁFICO DE IMC ---
   static Future<Uint8List> getHistorialGraficoBytes(
       String token, int pacienteId) async {
     final res = await http.get(
@@ -108,7 +126,6 @@ class ApiService {
     throw Exception('Failed to load graph');
   }
 
-  // --- ¡NUEVO! GRÁFICO DE PESO ---
   static Future<Uint8List> getGraficoPesoBytes(String token, int pacienteId) async {
     final res = await http.get(
       Uri.parse('$baseUrl/pacientes/$pacienteId/grafico/peso'),
@@ -120,7 +137,6 @@ class ApiService {
     throw Exception('Failed to load peso graph');
   }
 
-  // --- ¡NUEVO! GRÁFICO DE TALLA ---
   static Future<Uint8List> getGraficoTallaBytes(String token, int pacienteId) async {
     final res = await http.get(
       Uri.parse('$baseUrl/pacientes/$pacienteId/grafico/talla'),
@@ -132,19 +148,6 @@ class ApiService {
     throw Exception('Failed to load talla graph');
   }
 
-  // --- ¡NUEVO! OBTENER URL DEL PDF (PARA WEB) ---
-  static String getPdfUrl(String token, int pacienteId) {
-    // No podemos pasar el token en la URL, así que este enfoque es simple
-    // pero menos seguro. Para un proyecto real, la descarga en web
-    // requeriría una lógica de token temporal.
-    // POR AHORA, para web, abriremos la URL y el backend (que comparte la sesión)
-    // debería manejarlo.
-    // *** CORRECCIÓN: La autenticación web por URL es mala idea. ***
-    // Llamaremos a getPdfBytes y usaremos un "blob" para descargarlo.
-    return '$baseUrl/pacientes/$pacienteId/exportar-pdf';
-  }
-
-  // --- ¡NUEVO! OBTENER BYTES DEL PDF (PARA MÓVIL Y WEB) ---
   static Future<Uint8List> getPdfBytes(String token, int pacienteId) async {
     final res = await http.get(
       Uri.parse('$baseUrl/pacientes/$pacienteId/exportar-pdf'),
@@ -156,7 +159,6 @@ class ApiService {
     throw Exception('Failed to download PDF');
   }
 
-  // --- Endpoint de Chat (sin cambios) ---
   static Future<Map<String, dynamic>> enviarMensaje(
       String token, String mensaje, int pacienteId, String? conversationId) async {
     final res = await http.post(
@@ -175,7 +177,6 @@ class ApiService {
     }
   }
 
-  // --- Endpoint de Gráfico (sin cambios) ---
   static String getGraficoUrl(String graphId) {
     final cacheBuster = DateTime.now().millisecondsSinceEpoch;
     return '$baseUrl/grafico/$graphId?v=$cacheBuster';

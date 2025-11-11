@@ -51,7 +51,7 @@ class UserDevice(Base):
     __table_args__ = (UniqueConstraint('user_id', 'fcm_token', name='_user_device_uc'),)
 
 
-# --- MODELO PACIENTE (Sin cambios) ---
+# --- MODELO PACIENTE (CORREGIDO) ---
 class Paciente(Base):
     __tablename__ = "pacientes"
     
@@ -62,9 +62,13 @@ class Paciente(Base):
     tutor_id = Column(Integer, ForeignKey("users.id"))
     
     tutor = relationship("User", back_populates="pacientes")
-    calculos = relationship("Calculo", back_populates="calculos")
+    
+    # --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
+    # Debería ser back_populates="paciente"
+    calculos = relationship("Calculo", back_populates="paciente") 
+    # --- FIN DE LA CORRECCIÓN ---
 
-# --- MODELO CALCULO (Sin cambios) ---
+# --- MODELO CALCULO (CORREGIDO) ---
 class Calculo(Base):
     __tablename__ = "calculos"
 
@@ -77,7 +81,11 @@ class Calculo(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
     paciente_id = Column(Integer, ForeignKey("pacientes.id"))
     
+    # --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
+    # La relación se llama 'paciente' y se conecta con 'calculos'
     paciente = relationship("Paciente", back_populates="calculos")
+    # --- FIN DE LA CORRECCIÓN ---
+
 
 # --- MODELO PERCENTIL (Sin cambios) ---
 class Percentil(Base):

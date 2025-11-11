@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "974695670355",
+    "project_id": "chatbot-imc-app",
+    "storage_bucket": "chatbot-imc-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:974695670355:android:f3fe0314a1ffcdc0dd9ca6",
+        "android_client_info": {
+          "package_name": "com.example.frontend"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAqLVDl3-3tOo3Bwfqayv0mh2KkTrlpV7M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

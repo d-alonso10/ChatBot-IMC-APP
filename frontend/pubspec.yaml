@@ -36,6 +36,9 @@ dependencies:
   flutter_secure_storage: ^9.0.0
   flutter_staggered_animations: ^1.1.1 # <-- AÑADIR ESTA LÍNEA
 
+  firebase_core: ^3.2.0
+  firebase_messaging: ^15.0.3
+
   cupertino_icons: ^1.0.6
   intl: ^0.19.0
   url_launcher: ^6.3.0       # Para lanzar URLs (descarga en web)
