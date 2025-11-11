@@ -53,7 +53,7 @@ class NotificationService {
       // No se obtiene de firebase_options.dart.
       final fcmToken = await _firebaseMessaging.getToken(
         vapidKey: kIsWeb 
-            ? "PEGA_TU_CLAVE_PÚBLICA_VAPID_AQUÍ" 
+            ? "BFwcXE_7Y5z6xyVOKb6V0Bcd7yQ3B9X-TalQ8kPlsmRQAhYDH" 
             : null,
       );
       // --- FIN DE LA CORRECCIÓN ---
