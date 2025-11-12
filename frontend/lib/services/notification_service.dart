@@ -53,7 +53,7 @@ class NotificationService {
       // No se obtiene de firebase_options.dart.
       final fcmToken = await _firebaseMessaging.getToken(
         vapidKey: kIsWeb 
-            ? "BFwcXE_7Y5z6xyVOKb6V0Bcd7yQ3B9X-TalQ8kPlsmRQAhYDH" 
+            ? "BFwcXE_7Y5z6xyVOKb6V0Bcd7yQ3B9X-TalQ8kPlsmRQAhYDHU5d86dxNAc7Yg5aD7SJszAC_s9Xdj-e-6tw-3c" 
             : null,
       );
       // --- FIN DE LA CORRECCIÓN ---
